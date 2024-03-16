@@ -1,5 +1,3 @@
-import math
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,58 +22,9 @@ def spectrogram(wave, n_fft, hop_size):
 # estimate energy
 # wave: [BatchSize, 1, Length]
 # Output: [BatchSize, 1, Frames]
-def energy(wave,
+def estimate_energy(wave,
            frame_size=480):
     return F.max_pool1d((wave.abs()).unsqueeze(1), frame_size)
-
-
-# Oscillate harmonic signal
-#
-# Inputs ---
-# f0: [BatchSize, 1, Frames]
-#
-# Outputs ---
-# (signals, phase)
-# signals: [BatchSize, NumHarmonics, Length]
-# phase: [BatchSize, NumHarmonics Length]
-#
-# phase's range is 0 to 1, multiply 2 * pi if you need radians
-# length = Frames * frame_size
-def oscillate_harmonics(f0,
-                        frame_size=480,
-                        sample_rate=24000,
-                        num_harmonics=0,
-                        begin_point=0,
-                        min_frequency=10.0,
-                        noise_scale=0.33):
-    N = f0.shape[0]
-    Nh = num_harmonics + 1
-    Lf = f0.shape[2]
-    Lw = Lf * frame_size
-
-    device = f0.device
-
-    # generate frequency of harmonics
-    mul = (torch.arange(Nh, device=device) + 1).unsqueeze(0).unsqueeze(2).expand(N, Nh, Lf)
-    fs = f0 * mul
-
-    # change length to wave's
-    fs = F.interpolate(fs, Lw, mode='linear')
-
-    # unvoiced / voiced mask
-    uv = F.interpolate((fs >= min_frequency).to(torch.float), Lw, mode='linear')
-
-    # generate harmonics
-    I = torch.cumsum(fs / sample_rate, dim=2) # numerical integration
-    theta = 2 * math.pi * (I % 1) # convert to radians
-
-    harmonics = torch.sin(theta) * uv
-
-    # add noise
-    noise = torch.randn_like(harmonics) * noise_scale
-    output = harmonics + noise
-
-    return output
 
 
 def estimate_f0_dio(wf, sample_rate=24000, segment_size=480, f0_min=20, f0_max=20000):
@@ -126,3 +75,14 @@ def estimate_f0(wf, sample_rate=24000, segment_size=480, algorithm='harvest'):
         pitchs = estimate_f0_dio(wf, 16000)
     return F.interpolate(pitchs, l // segment_size, mode='linear')
 
+
+class CausalConv1d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, groups=1, dilation=1):
+        super().__init__()
+        self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride, groups=groups, dilation=dilation)
+        self.pad_size = (kernel_size - 1) * dilation
+
+    def forward(self, x):
+        x = F.pad(x, [self.pad_size, 0])
+        x = self.conv(x)
+        return x

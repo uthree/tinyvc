@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .causal_convolution import CausalConv1d
-from .common import spectrogram
+from .common import spectrogram, CausalConv1d
 
 
 class LayerNorm(nn.Module):
@@ -68,10 +67,10 @@ class Encoder(nn.Module):
         return phone, f0_logits
 
     def infer(self, wave):
-        spec = spectrogram(wave, n_fft, hop_size)
-        phone, l0_logits = slef.forward(spec)
+        spec = spectrogram(wave, self.n_fft, self.hop_size)
+        phone, f0_logits = self.forward(spec)
         ids = torch.argmax(f0_logits, dim=1, keepdim=True)
-        f0 = id2freq(ids)
+        f0 = self.id2freq(ids)
         return phone, f0
 
     def freq2id(self, f):
