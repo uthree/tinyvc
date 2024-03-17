@@ -32,7 +32,8 @@ parser.add_argument('--save-interval', default=100, type=int)
 parser.add_argument('-fp16', default=False, type=bool)
 
 parser.add_argument('--weight-adv', default=1.0, type=float)
-parser.add_argument('--weight-mel', default=2.5, type=float)
+parser.add_argument('--weight-mel', default=45.0, type=float)
+parser.add_argument('--weight-feat', default=2.0, type=float)
 
 args = parser.parse_args()
 
@@ -53,7 +54,7 @@ def save_models(dec, dis):
     print("Complete!")
 
 
-def center(wave, length=10000):
+def center(wave, length=8000):
     c = wave.shape[1] // 2
     half_len = length // 2
     return wave[:, c-half_len:c+half_len]
@@ -102,11 +103,14 @@ for epoch in range(args.epoch):
 
             loss_adv = 0
             fake = fake.clamp(-1.0, 1.0)
-            logits, _ = discriminator(center(fake))
+            logits, feats_fake = discriminator(center(fake))
+            _, feats_real = discriminator(center(wave))
             for logit in logits:
                 loss_adv += (logit ** 2).mean() / len(logits)
-
-            loss_g = loss_adv * args.weight_adv + loss_mel * args.weight_mel
+            loss_feat = 0
+            for r, f in zip(feats_real, feats_fake):
+                loss_feat += (r - f).abs().mean() / len(feats_fake)
+            loss_g = loss_adv * args.weight_adv + loss_mel * args.weight_mel + loss_feat * args.weight_feat
 
         scaler.scale(loss_g).backward()
         nn.utils.clip_grad_norm_(decoder.parameters(), 1.0)
@@ -127,7 +131,7 @@ for epoch in range(args.epoch):
         nn.utils.clip_grad_norm_(discriminator.parameters(), 1.0)
         scaler.step(OptD)
 
-        tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Dis.: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Mel.: {loss_mel.item():.4f}")
+        tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Dis.: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Mel.: {loss_mel.item():.4f}, Feat. {loss_feat.item():.4f}")
 
         scaler.update()
         step_count += 1
