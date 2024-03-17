@@ -138,8 +138,8 @@ class Upsample(nn.Module):
 
 class Synthesizer(nn.Module):
     def __init__(self,
-                 channels=[192, 96, 48, 24],
-                 factors=[4, 4, 5, 6],
+                 channels=[384, 192, 96, 48, 24],
+                 factors=[2, 3, 5, 4, 4],
                  num_harmonics=0,
                  spk_dim=256,
                  num_phones=32,
