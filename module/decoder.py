@@ -90,6 +90,7 @@ class Downsample(nn.Module):
         self.pool = nn.AvgPool1d(factor)
 
     def forward(self, x):
+        x = self.pool(x)
         res = self.down_res(x)
         x = F.leaky_relu(x, 0.1)
         x = self.c1(x)
@@ -98,7 +99,6 @@ class Downsample(nn.Module):
         x = F.leaky_relu(x, 0.1)
         x = self.c3(x)
         x = x + res
-        x = self.pool(x)
         return x
 
 
@@ -139,7 +139,7 @@ class Upsample(nn.Module):
 class Synthesizer(nn.Module):
     def __init__(self,
                  channels=[384, 192, 96, 48, 24],
-                 factors=[2, 3, 5, 4, 4],
+                 factors=[2, 3, 4, 4, 5],
                  num_harmonics=0,
                  spk_dim=256,
                  num_phones=32,
@@ -159,7 +159,7 @@ class Synthesizer(nn.Module):
         self.film = FiLM(channels[0], channels[0])
 
         # downsample layers
-        self.down_input = nn.Conv1d(num_harmonics + 1, channels[-1], 1)
+        self.down_input = CausalConv1d(num_harmonics + 1, channels[-1], 5)
         self.downs = nn.ModuleList([])
         cond = list(reversed(channels))
         cond_next = cond[1:] + [cond[-1]]
@@ -175,7 +175,7 @@ class Synthesizer(nn.Module):
             self.ups.append(Upsample(u, u_n, c_n, f))
 
         # output layer
-        self.output_layer = CausalConv1d(channels[-1], 1, 3)
+        self.output_layer = CausalConv1d(channels[-1], 1, 5)
 
     def forward(self, phone, energy, spk, source_signals):
         x = self.phone_in(phone)

@@ -8,7 +8,7 @@ def get_padding(kernel_size, dilation=1):
 
 
 class DiscriminatorP(nn.Module):
-    def __init__(self, period, kernel_size=5, stride=3, channels=16, num_layers=4, max_channels=256, use_spectral_norm=False):
+    def __init__(self, period, kernel_size=5, stride=3, channels=32, num_layers=4, max_channels=256, use_spectral_norm=False):
         super().__init__()
         self.period = period
         norm_f = nn.utils.weight_norm if use_spectral_norm == False else nn.utils.spectral_norm
@@ -17,13 +17,13 @@ class DiscriminatorP(nn.Module):
         s = stride
         c = channels
 
-        convs = [nn.Conv2d(1, c, (k, 1), (s, 1), (get_padding(5, 1), 0))]
+        convs = [nn.Conv2d(1, c, (k, 1), (s, 1), (get_padding(5, 1), 0), padding_mode='replicate')]
         for i in range(num_layers):
             c_next = min(c * 2, max_channels)
-            convs.append(nn.Conv2d(c, c_next, (k, 1), (s, 1), (get_padding(5, 1), 0)))
+            convs.append(nn.Conv2d(c, c_next, (k, 1), (s, 1), (get_padding(5, 1), 0), padding_mode='replicate'))
             c = c_next
         self.convs = nn.ModuleList([norm_f(c) for c in convs])
-        self.post = norm_f(nn.Conv2d(c, 1, (3, 1), 1, (1, 0)))
+        self.post = norm_f(nn.Conv2d(c, 1, (3, 1), 1, (1, 0), padding_mode='replicate'))
 
     def forward(self, x):
         fmap = []
@@ -70,22 +70,22 @@ class DiscriminatorS(nn.Module):
         super().__init__()
         norm_f = nn.utils.weight_norm if use_spectral_norm == False else nn.utils.spectral_norm
 
-        if scale != 1:
+        if scale == 1:
             self.pool = nn.Identity()
         else:
             self.pool = nn.AvgPool1d(scale*2, scale)
 
         c = channels
         g = 1
-        convs = [nn.Conv1d(1, c, 15, 1, 7)]
+        convs = [nn.Conv1d(1, c, 15, 1, 7, padding_mode='replicate')]
         for _ in range(num_layers):
             g = min(g * 2, max_groups)
             c_next = min(c * 2, max_channels)
-            convs.append(nn.Conv1d(c, c_next, 41, 2, 20, groups=2))
+            convs.append(nn.Conv1d(c, c_next, 41, 2, 20, groups=g, padding_mode='replicate'))
             c = c_next
 
         self.convs = nn.ModuleList([norm_f(c) for c in convs])
-        self.post = norm_f(nn.Conv1d(c, 1, 3, 1, 1))
+        self.post = norm_f(nn.Conv1d(c, 1, 3, 1, 1, padding_mode='replicate'))
 
     def forward(self, x):
         fmap = []
@@ -121,7 +121,7 @@ class MultiScaleDiscriminator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self,
                  scales=[1, 2, 3],
-                 periods=[5, 7, 11, 13, 17, 23, 31],
+                 periods=[2, 3, 5, 7, 11],
                  mpd_num_layers=4,
                  msd_num_layers=6,
                  mpd_channels=32,

@@ -50,7 +50,7 @@ hubert = HubertForCTC.from_pretrained(args.hubert_ctc).to(device).eval()
 
 cross_entropy_phone = nn.CrossEntropyLoss().to(device)
 weight = torch.ones(model.num_f0_classes)
-weight[0] = 5e-3
+weight[0] = 1e-3
 cross_entropy_f0 = nn.CrossEntropyLoss(weight).to(device)
 
 step_count = 0
@@ -77,7 +77,7 @@ for epoch in range(args.epoch):
             length = phone_label.shape[1]
             loss_phone = cross_entropy_phone(F.interpolate(phone_out, length, mode='linear'), phone_label) 
             loss_f0 = cross_entropy_f0(f0_out, f0_label)
-            loss = loss_phone + loss_f0
+            loss = loss_f0 + loss_phone * 10
 
         scaler.scale(loss).backward()
         scaler.step(Opt)
