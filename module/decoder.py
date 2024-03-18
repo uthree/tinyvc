@@ -110,8 +110,8 @@ class Upsample(nn.Module):
         self.c1 = CausalConv1d(input_channels, input_channels, 3, dilation=1)
         self.c2 = CausalConv1d(input_channels, input_channels, 3, dilation=3)
         self.film1 = FiLM(input_channels, cond_channels)
-        self.c3 = CausalConv1d(input_channels, input_channels, 3, dilation=9)
-        self.c4 = CausalConv1d(input_channels, input_channels, 3, dilation=27)
+        self.c3 = CausalConv1d(input_channels, input_channels, 3, dilation=5)
+        self.c4 = CausalConv1d(input_channels, input_channels, 3, dilation=7)
         self.film2 = FiLM(input_channels, cond_channels)
         self.c5 = CausalConv1d(input_channels, output_channels, 3, dilation=1)
 
