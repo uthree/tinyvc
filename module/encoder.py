@@ -78,14 +78,15 @@ class Encoder(nn.Module):
         probs = F.softmax(probs, dim=1)
         freqs = self.id2freq(indices)
         f0 = (probs * freqs).sum(dim=1, keepdim=True)
+        f0[f0 <= self.f0_min] = 0
         return content, f0
 
     def freq2id(self, f):
-        return torch.round(torch.clamp(50 * torch.log2(f / self.f0_min), 0, self.num_f0_classes-1)).to(torch.long)
+        return torch.ceil(torch.clamp(50 * torch.log2(f), 0, self.num_f0_classes-1)).to(torch.long)
 
     def id2freq(self, ids):
         x = ids.to(torch.float)
-        x = self.f0_min * (2 ** (x / 50))
+        x = 2 ** (x / 50)
         x[x <= self.f0_min] = 0
         return x
 

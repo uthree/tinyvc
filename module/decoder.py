@@ -209,4 +209,5 @@ class Decoder(nn.Module):
                 self.synthesizer.num_harmonics)
         spk = self.speaker_embedding(spk_id)
         output = self.synthesizer(phone, energy, spk, src)
+        output = src[:, 0]
         return output
