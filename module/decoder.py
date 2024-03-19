@@ -108,8 +108,8 @@ class Upsample(nn.Module):
         self.c1 = nn.Conv1d(input_channels, input_channels, 3, 1, 1, dilation=1, padding_mode='replicate')
         self.c2 = nn.Conv1d(input_channels, input_channels, 3, 1, 3, dilation=3, padding_mode='replicate')
         self.film1 = FiLM(input_channels, cond_channels)
-        self.c3 = nn.Conv1d(input_channels, input_channels, 3, 1, 5, dilation=5, padding_mode='replicate')
-        self.c4 = nn.Conv1d(input_channels, input_channels, 3, 1, 7, dilation=7, padding_mode='replicate')
+        self.c3 = nn.Conv1d(input_channels, input_channels, 3, 1, 9, dilation=9, padding_mode='replicate')
+        self.c4 = nn.Conv1d(input_channels, input_channels, 3, 1, 27, dilation=27, padding_mode='replicate')
         self.film2 = FiLM(input_channels, cond_channels)
         self.c5 = nn.Conv1d(input_channels, output_channels, 1)
 
