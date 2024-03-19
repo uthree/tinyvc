@@ -48,12 +48,14 @@ class Encoder(nn.Module):
                  content_channels=64,
                  num_phones=32,
                  num_f0_classes=256,
-                 f0_min=20):
+                 f0_min=20,
+                 f0_estimate_topk=2):
         super().__init__()
         self.n_fft = n_fft
         self.hop_size = hop_size
         self.f0_min = f0_min
         self.num_f0_classes = num_f0_classes
+        self.f0_estimate_topk = f0_estimate_topk
 
         self.input_layer = nn.Conv1d(n_fft//2+1, channels, 1)
         self.blocks = nn.Sequential(*[
@@ -72,8 +74,10 @@ class Encoder(nn.Module):
     def infer(self, wave):
         spec = spectrogram(wave, self.n_fft, self.hop_size)
         content, f0_logits = self.forward(spec)
-        ids = torch.argmax(f0_logits, dim=1, keepdim=True)
-        f0 = self.id2freq(ids)
+        probs, indices = torch.topk(f0_logits, self.f0_estimate_topk, dim=1)
+        probs = F.softmax(probs, dim=1)
+        freqs = self.id2freq(indices)
+        f0 = (probs * freqs).sum(dim=1, keepdim=True)
         return content, f0
 
     def freq2id(self, f):
