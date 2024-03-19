@@ -47,7 +47,7 @@ class Encoder(nn.Module):
                  kernel_size=3,
                  content_channels=64,
                  num_phones=32,
-                 num_f0_classes=256,
+                 num_f0_classes=512,
                  f0_min=20,
                  f0_estimate_topk=2):
         super().__init__()
@@ -82,11 +82,11 @@ class Encoder(nn.Module):
         return content, f0
 
     def freq2id(self, f):
-        return torch.ceil(torch.clamp(50 * torch.log2(f), 0, self.num_f0_classes-1)).to(torch.long)
+        return torch.ceil(torch.clamp(50 * torch.log2(f / 10.0), 0, self.num_f0_classes-1)).to(torch.long)
 
     def id2freq(self, ids):
         x = ids.to(torch.float)
-        x = 2 ** (x / 50)
+        x = 10.0 * (2 ** (x / 50))
         x[x <= self.f0_min] = 0
         return x
 
