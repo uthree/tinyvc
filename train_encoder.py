@@ -71,7 +71,8 @@ for epoch in range(args.epoch):
             f0_label = model.freq2id(f0).squeeze(1)
 
             # estimate
-            phone_out, f0_out = model(spectrogram(wave, model.n_fft, model.hop_size))
+            z, f0_out = model(spectrogram(wave, model.n_fft, model.hop_size))
+            phone_out = model.to_phone(z)
 
             # loss
             length = phone_label.shape[1]

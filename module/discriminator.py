@@ -73,7 +73,7 @@ class DiscriminatorS(nn.Module):
         if scale == 1:
             self.pool = nn.Identity()
         else:
-            self.pool = nn.AvgPool1d(scale*2, scale)
+            self.pool = nn.AvgPool1d(scale)
 
         c = channels
         g = 1

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .common import spectrogram, CausalConv1d
+from .common import spectrogram
 
 
 class LayerNorm(nn.Module):
@@ -23,7 +23,8 @@ class LayerNorm(nn.Module):
 class ResBlock(nn.Module):
     def __init__(self, channels, kernel_size=3, dilation=1):
         super().__init__()
-        self.c1 = CausalConv1d(channels, channels, kernel_size, dilation=dilation)
+        padding = (kernel_size - 1) * dilation // 2
+        self.c1 = nn.Conv1d(channels, channels, kernel_size, 1, padding, dilation=dilation, padding_mode='replicate')
         self.norm = LayerNorm(channels)
         self.c2 = nn.Conv1d(channels, channels * 2, 1)
         self.c3 = nn.Conv1d(channels * 2, channels, 1)
@@ -44,6 +45,7 @@ class Encoder(nn.Module):
                  channels=256,
                  dilations=[1, 3, 5, 1, 3, 5],
                  kernel_size=3,
+                 content_channels=64,
                  num_phones=32,
                  num_f0_classes=256,
                  f0_min=20):
@@ -56,22 +58,23 @@ class Encoder(nn.Module):
         self.input_layer = nn.Conv1d(n_fft//2+1, channels, 1)
         self.blocks = nn.Sequential(*[
             ResBlock(channels, kernel_size, d) for d in dilations])
-        self.to_phone = nn.Conv1d(channels, num_phones, 1)
+        self.to_content = nn.Conv1d(channels, content_channels, 1)
+        self.to_phone = nn.Conv1d(content_channels, num_phones, 1)
         self.to_f0 = nn.Conv1d(channels, num_f0_classes, 1)
 
     def forward(self, spec):
         x = self.input_layer(spec)
         x = self.blocks(x)
-        phone = self.to_phone(x)
+        content = self.to_content(x)
         f0_logits = self.to_f0(x)
-        return phone, f0_logits
+        return content, f0_logits
 
     def infer(self, wave):
         spec = spectrogram(wave, self.n_fft, self.hop_size)
-        phone, f0_logits = self.forward(spec)
+        content, f0_logits = self.forward(spec)
         ids = torch.argmax(f0_logits, dim=1, keepdim=True)
         f0 = self.id2freq(ids)
-        return phone, f0
+        return content, f0
 
     def freq2id(self, f):
         return torch.round(torch.clamp(50 * torch.log2(f / self.f0_min), 0, self.num_f0_classes-1)).to(torch.long)

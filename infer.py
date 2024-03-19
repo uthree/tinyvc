@@ -47,14 +47,14 @@ for i, path in enumerate(paths):
     wf = resample(wf, sr, 24000)
     wf = wf.mean(dim=0, keepdim=True).to(device)
 
-    phone, f0 = encoder.infer(wf)
+    z, f0 = encoder.infer(wf)
     scale = 12 * torch.log2(f0 / 440)
     scale += args.pitch_shift
     f0 = 440 * (2 ** (scale / 12))
 
     energy = estimate_energy(wf, decoder.synthesizer.frame_size)
-    phone = instance_norm(phone)
-    wf = decoder.infer(phone, energy, spk_id, f0).cpu()
+    z = instance_norm(z)
+    wf = decoder.infer(z, energy, spk_id, f0).cpu()
 
     file_name = f"{os.path.splitext(os.path.basename(path))[0]}"
     torchaudio.save(os.path.join(args.outputs, f"{file_name}.wav"), src=wf, sample_rate=24000)

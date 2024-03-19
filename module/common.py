@@ -74,15 +74,3 @@ def estimate_f0(wf, sample_rate=24000, segment_size=480, algorithm='harvest'):
     elif algorithm == 'dio':
         pitchs = estimate_f0_dio(wf, 16000)
     return F.interpolate(pitchs, l // segment_size, mode='linear')
-
-
-class CausalConv1d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, groups=1, dilation=1):
-        super().__init__()
-        self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride, groups=groups, dilation=dilation)
-        self.pad_size = (kernel_size - 1) * dilation
-
-    def forward(self, x):
-        x = F.pad(x, [self.pad_size, 0])
-        x = self.conv(x)
-        return x

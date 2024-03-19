@@ -33,7 +33,7 @@ parser.add_argument('--save-interval', default=100, type=int)
 parser.add_argument('-fp16', default=False, type=bool)
 
 parser.add_argument('--weight-adv', default=1.0, type=float)
-parser.add_argument('--weight-aux', default=1.0, type=float)
+parser.add_argument('--weight-aux', default=45.0, type=float)
 parser.add_argument('--weight-feat', default=2.0, type=float)
 
 args = parser.parse_args()

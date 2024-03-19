@@ -4,20 +4,18 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .common import CausalConv1d
-
 
 # Oscillate harmonic signal
 #
 # Inputs ---
 # f0: [BatchSize, 1, Frames]
+# frame_size: int
+# num_harmonics: int
+# min_frequency: float
+# noise_scale: float
 #
-# Outputs ---
-# (signals, phase)
-# signals: [BatchSize, NumHarmonics, Length]
-# phase: [BatchSize, NumHarmonics Length]
+# Output: [BatchSize, NumHarmonics, Length]
 #
-# phase's range is 0 to 1, multiply 2 * pi if you need radians
 # length = Frames * frame_size
 def oscillate_harmonics(f0,
                         frame_size=480,
@@ -84,9 +82,9 @@ class Downsample(nn.Module):
         self.factor = factor
 
         self.down_res = nn.Conv1d(input_channels, output_channels, 1)
-        self.c1 = CausalConv1d(input_channels, input_channels, 3, dilation=1)
-        self.c2 = CausalConv1d(input_channels, input_channels, 3, dilation=2)
-        self.c3 = CausalConv1d(input_channels, output_channels, 3, dilation=4)
+        self.c1 = nn.Conv1d(input_channels, input_channels, 3, 1, 1, dilation=1, padding_mode='replicate')
+        self.c2 = nn.Conv1d(input_channels, input_channels, 3, 1, 2, dilation=2, padding_mode='replicate')
+        self.c3 = nn.Conv1d(input_channels, output_channels, 3, 1, 4, dilation=4, padding_mode='replicate')
         self.pool = nn.AvgPool1d(factor)
 
     def forward(self, x):
@@ -107,13 +105,13 @@ class Upsample(nn.Module):
         super().__init__()
         self.factor = factor
 
-        self.c1 = CausalConv1d(input_channels, input_channels, 3, dilation=1)
-        self.c2 = CausalConv1d(input_channels, input_channels, 3, dilation=3)
+        self.c1 = nn.Conv1d(input_channels, input_channels, 3, 1, 1, dilation=1, padding_mode='replicate')
+        self.c2 = nn.Conv1d(input_channels, input_channels, 3, 1, 3, dilation=3, padding_mode='replicate')
         self.film1 = FiLM(input_channels, cond_channels)
-        self.c3 = CausalConv1d(input_channels, input_channels, 3, dilation=5)
-        self.c4 = CausalConv1d(input_channels, input_channels, 3, dilation=7)
+        self.c3 = nn.Conv1d(input_channels, input_channels, 3, 1, 5, dilation=5, padding_mode='replicate')
+        self.c4 = nn.Conv1d(input_channels, input_channels, 3, 1, 7, dilation=7, padding_mode='replicate')
         self.film2 = FiLM(input_channels, cond_channels)
-        self.c5 = CausalConv1d(input_channels, output_channels, 3, dilation=1)
+        self.c5 = nn.Conv1d(input_channels, output_channels, 1)
 
     def forward(self, x, c):
         c = F.interpolate(c, scale_factor=self.factor, mode='linear')
@@ -142,7 +140,7 @@ class Synthesizer(nn.Module):
                  factors=[2, 3, 4, 4, 5],
                  num_harmonics=0,
                  spk_dim=256,
-                 num_phones=32,
+                 content_channels=64,
                  sample_rate=24000,
                  frame_size=480):
         super().__init__()
@@ -150,16 +148,16 @@ class Synthesizer(nn.Module):
         self.num_harmonics = num_harmonics
         self.sample_rate = sample_rate
         self.frame_size = frame_size
-        self.num_phones = num_phones
+        self.content_channels = content_channels
 
         # input layers
         self.spk_in = nn.Conv1d(spk_dim, channels[0], 1)
         self.energy_in = nn.Conv1d(1, channels[0], 1)
-        self.phone_in = nn.Conv1d(num_phones, channels[0], 1)
+        self.phone_in = nn.Conv1d(content_channels, channels[0], 1)
         self.film = FiLM(channels[0], channels[0])
 
         # downsample layers
-        self.down_input = CausalConv1d(num_harmonics + 1, channels[-1], 5)
+        self.down_input = nn.Conv1d(num_harmonics + 1, channels[-1], 5, 1, 2, padding_mode='replicate')
         self.downs = nn.ModuleList([])
         cond = list(reversed(channels))
         cond_next = cond[1:] + [cond[-1]]
@@ -175,7 +173,7 @@ class Synthesizer(nn.Module):
             self.ups.append(Upsample(u, u_n, c_n, f))
 
         # output layer
-        self.output_layer = CausalConv1d(channels[-1], 1, 5)
+        self.output_layer = nn.Conv1d(channels[-1], 1, 5, 1, 2, padding_mode='replicate')
 
     def forward(self, phone, energy, spk, source_signals):
         x = self.phone_in(phone)
