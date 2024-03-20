@@ -92,8 +92,8 @@ for epoch in range(args.epoch):
         # train Generator
         OptG.zero_grad()
         with torch.cuda.amp.autocast(enabled=args.fp16):
-            phone, f0 = encoder.infer(wave)
-            phone = instance_norm(phone)
+            z, f0 = encoder.infer(wave)
+            z = instance_norm(z)
             energy = estimate_energy(wave, decoder.synthesizer.frame_size)
             src = oscillate_harmonics(
                     f0,
@@ -101,7 +101,7 @@ for epoch in range(args.epoch):
                     decoder.synthesizer.sample_rate,
                     decoder.synthesizer.num_harmonics)
             spk = decoder.speaker_embedding(spk_id)
-            fake = decoder.synthesizer(phone, energy, spk, src)
+            fake = decoder.synthesizer(z, energy, spk, src)
             loss_aux = AuxLoss(fake, wave)
 
             if d_join:
