@@ -16,11 +16,12 @@ from module.convertor import Convertor
 
 
 parser = argparse.ArgumentParser(description="realtime inference")
+parser.add_argument('-encp', '--encoder-path', default='./models/encoder.pt')
+parser.add_argument('-decp', '--decoder-path', default='./models/decoder.pt')
 parser.add_argument('-i', '--input', default=0, type=int)
 parser.add_argument('-o', '--output', default=0, type=int)
 parser.add_argument('-l', '--loopback', default=-1, type=int)
 parser.add_argument('-p', '--pitch-shift', default=0, type=float)
-
 parser.add_argument('-t', '--target', default=0, type=int)
 parser.add_argument('-c', '--chunk', default=1920, type=int)
 parser.add_argument('-b', '--buffer', default=4, type=int)
@@ -38,19 +39,6 @@ encoder.load_state_dict(torch.load(args.encoder_path, map_location=device))
 decoder = Decoder().to(device).eval()
 decoder.load_state_dict(torch.load(args.decoder_path, map_location=device))
 convertor = Convertor(encoder, decoder).to(device)
-
-
-if args.index == 'NONE':
-    print("Loading target...")
-    wf, sr = torchaudio.load(args.target)
-    wf = wf.to(device)
-    wf = resample(wf, sr, 24000)
-    wf = wf[:1]
-    print("Encoding...")
-    tgt = convertor.encode_target(wf)
-else:
-    print("Loading index...")
-    tgt = torch.load(args.index).to(device)
 
 audio = pyaudio.PyAudio()
 
