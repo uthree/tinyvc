@@ -20,7 +20,7 @@ parser.add_argument('-i', '--inputs', default="./inputs/")
 parser.add_argument('-o', '--outputs', default="./outputs/")
 parser.add_argument('-encp', '--encoder-path', default='./models/encoder.pt')
 parser.add_argument('-decp', '--decoder-path', default='./models/decoder.pt')
-parser.add_argument('-t', '--target', default=0, type=int)
+parser.add_argument('-t', '--target', default='target.wav')
 parser.add_argument('-d', '--device', default='cpu')
 parser.add_argument('-p', '--pitch-shift', default=0.0, type=float)
 parser.add_argument('-c', '--chunk_size', default=1920, type=int)
@@ -39,7 +39,10 @@ convertor = Convertor(encoder, decoder).to(device)
 chunk_size = args.chunk_size
 buffer_size = args.buffer_size * chunk_size
 
-spk = convertor.get_speaker_embedding(args.target, device)
+# load target
+wf, sr = torchaudio.load(args.target)
+wf = resample(wf, sr, 24000)
+tgt = convertor.encode_target(wf)
 
 if not os.path.exists(args.outputs):
     os.mkdir(args.outputs)
@@ -57,17 +60,9 @@ for i, path in enumerate(paths):
     wf = wf.mean(dim=0, keepdim=True)
     
     if args.no_chunking:
-        with torch.inference_mode():
-            wf = wf.to(device)
-            energy = estimate_energy(wf)
-            z, f0 = encoder.infer(wf)
-            z = instance_norm(z)
-            scale = 12 * torch.log2(f0 / 440)
-            scale += args.pitch_shift
-            f0 = 440 * (2 ** (scale / 12))
-            spk_id = torch.LongTensor([args.target]).to(device)
-            wf = decoder.infer(z, energy, spk_id, f0)
-            wf = wf.cpu()
+        wf = wf.to(device)
+        wf = convertor.convert_without_chunking(wf, tgt, args.pitch_shift, device)
+        wf = wf.cpu()
     else:
         chunks = torch.split(wf, chunk_size, dim=1)
         results = []
@@ -76,7 +71,7 @@ for i, path in enumerate(paths):
             if chunk.shape[1] < chunk_size:
                 chunk = torch.cat([chunk, torch.zeros(1, chunk_size - chunk.shape[1])], dim=1)
             chunk = chunk.to(device)
-            out, buffer = convertor.convert(chunk, buffer, spk, args.pitch_shift, device)
+            out, buffer = convertor.convert(chunk, buffer, tgt, args.pitch_shift, device)
             out = out.cpu()
             results.append(out)
         wf = torch.cat(results, dim=1)

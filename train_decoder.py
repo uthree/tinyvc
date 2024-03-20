@@ -12,7 +12,7 @@ from module.dataset import Dataset
 from module.common import spectrogram, estimate_energy
 from module.loss import MultiScaleSTFTLoss
 from module.encoder import Encoder
-from module.decoder import Decoder, oscillate_harmonics
+from module.decoder import Decoder, match_features
 from module.discriminator import Discriminator
 from module.instance_norm import instance_norm
 
@@ -33,7 +33,8 @@ parser.add_argument('--save-interval', default=100, type=int)
 parser.add_argument('-fp16', default=False, type=bool)
 
 parser.add_argument('--weight-adv', default=1.0, type=float)
-parser.add_argument('--weight-aux', default=45.0, type=float)
+parser.add_argument('--weight-dsp', default=1.0, type=float)
+parser.add_argument('--weight-aux', default=10.0, type=float)
 parser.add_argument('--weight-feat', default=2.0, type=float)
 
 args = parser.parse_args()
@@ -93,15 +94,15 @@ for epoch in range(args.epoch):
         OptG.zero_grad()
         with torch.cuda.amp.autocast(enabled=args.fp16):
             z, f0 = encoder.infer(wave)
-            z = instance_norm(z)
-            energy = estimate_energy(wave, decoder.synthesizer.frame_size)
-            src = oscillate_harmonics(
-                    f0,
-                    decoder.synthesizer.frame_size,
-                    decoder.synthesizer.sample_rate,
-                    decoder.synthesizer.num_harmonics)
-            spk = decoder.speaker_embedding(spk_id)
-            fake = decoder.synthesizer(z, energy, spk, src)
+            z = match_features(z, z).detach()
+            energy = estimate_energy(wave, decoder.frame_size)
+            dsp_out = decoder.source_net.synthesize(z, energy, f0)
+            fake = decoder.filter_net.synthesize(z, energy, dsp_out)
+
+            dsp_out = dsp_out.squeeze(1)
+            fake = fake.squeeze(1)
+
+            loss_dsp = AuxLoss(dsp_out, wave)
             loss_aux = AuxLoss(fake, wave)
 
             if d_join:
@@ -114,9 +115,9 @@ for epoch in range(args.epoch):
                 loss_feat = 0
                 for r, f in zip(feats_real, feats_fake):
                     loss_feat += (r - f).abs().mean() / len(feats_fake)
-                loss_g = loss_adv * args.weight_adv + loss_aux * args.weight_aux + loss_feat * args.weight_feat
+                loss_g = loss_adv * args.weight_adv + loss_aux * args.weight_aux + loss_feat * args.weight_feat + loss_dsp * args.weight_dsp
             else:
-                loss_g = loss_aux * args.weight_aux
+                loss_g = loss_aux * args.weight_aux + loss_dsp * args.weight_dsp
 
         scaler.scale(loss_g).backward()
         nn.utils.clip_grad_norm_(decoder.parameters(), 1.0)
@@ -139,9 +140,9 @@ for epoch in range(args.epoch):
             scaler.step(OptD)
         
         if d_join:
-            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Dis.: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Aux.: {loss_aux.item():.4f}, Feat. {loss_feat.item():.4f}")
+            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Dis.: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Aux.: {loss_aux.item():.4f}, Feat. {loss_feat.item():.4f}, DSP: {loss_dsp.item():.4f}")
         else:
-            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Aux.: {loss_aux.item():.4f}")
+            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Aux.: {loss_aux.item():.4f}, DSP: {loss_dsp.item():.4f}")
 
         scaler.update()
         step_count += 1

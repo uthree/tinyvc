@@ -13,17 +13,17 @@ from tqdm import tqdm
 from module.dataset import Dataset
 from module.encoder import Encoder
 from module.common import spectrogram
-from transformers import  HubertForCTC
+from transformers import  HubertModel
 
-parser = argparse.ArgumentParser(description="distillation of HuBERT CTC / Pitch Estimation")
+parser = argparse.ArgumentParser(description="distillation of HuBERT-Base 4th layer / Pitch Estimation")
 
 parser.add_argument('--dataset-cache', default='dataset_cache')
-parser.add_argument('--hubert-ctc', default='facebook/hubert-large-ls960-ft')
+parser.add_argument('--hubert', default='rinna/japanese-hubert-base')
 parser.add_argument('-path', '--path', default='models/encoder.pt')
 parser.add_argument('-lr', '--learning-rate', type=float, default=1e-4)
 parser.add_argument('-d', '--device', default='cuda')
 parser.add_argument('-e', '--epoch', default=60, type=int)
-parser.add_argument('-b', '--batch-size', default=2, type=int)
+parser.add_argument('-b', '--batch-size', default=4, type=int)
 parser.add_argument('-fp16', default=False, type=bool)
 args = parser.parse_args()
 
@@ -46,9 +46,8 @@ scaler = torch.cuda.amp.GradScaler(enabled=args.fp16)
 model = load_or_init_models(device)
 Opt = optim.AdamW(model.parameters(), lr=args.learning_rate)
 
-hubert = HubertForCTC.from_pretrained(args.hubert_ctc).to(device).eval()
+hubert = HubertModel.from_pretrained(args.hubert).to(device).eval()
 
-cross_entropy_phone = nn.CrossEntropyLoss().to(device)
 weight = torch.ones(model.num_f0_classes)
 weight[0] = 1e-3
 cross_entropy_f0 = nn.CrossEntropyLoss(weight).to(device)
@@ -66,19 +65,17 @@ for epoch in range(args.epoch):
         with torch.cuda.amp.autocast(enabled=args.fp16):
             wave_16k = resample(wave, 24000, 16000)
             # get pseudo-label
-            logits = hubert(wave_16k).logits
-            phone_label = torch.argmax(logits, dim=-1)
+            hubert_features = hubert(wave_16k, output_hidden_states=True).hidden_states[4]
+            hubert_features = hubert_features.transpose(1, 2)
             f0_label = model.freq2id(f0).squeeze(1)
 
             # estimate
             z, f0_out = model(spectrogram(wave, model.n_fft, model.hop_size))
-            phone_out = model.to_phone(z)
 
             # loss
-            length = phone_label.shape[1]
-            loss_phone = cross_entropy_phone(F.interpolate(phone_out, length, mode='linear'), phone_label) 
+            loss_distill = (z - F.interpolate(hubert_features, z.shape[2])).abs().mean()
             loss_f0 = cross_entropy_f0(f0_out, f0_label)
-            loss = loss_f0 + loss_phone * 10
+            loss = loss_f0 + loss_distill * 45
 
         scaler.scale(loss).backward()
         scaler.step(Opt)
@@ -87,7 +84,7 @@ for epoch in range(args.epoch):
 
         step_count += 1
 
-        tqdm.write(f"Epoch: {epoch}, Step {step_count}, F0 Est.: {loss_f0.item():.4f}, CTC Distill.: {loss_phone.item():.4f}")
+        tqdm.write(f"Epoch: {epoch}, Step {step_count}, F0 Est.: {loss_f0.item():.4f}, Hubert Distill.: {loss_distill.item():.4f}")
 
         bar.update(N)
 

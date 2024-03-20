@@ -43,9 +43,9 @@ class Encoder(nn.Module):
     def __init__(self, n_fft=1920,
                  hop_size=480,
                  channels=256,
-                 dilations=[1, 3, 5, 1, 3, 5],
+                 dilations=[1, 3, 5, 7, 9, 1],
                  kernel_size=3,
-                 content_channels=64,
+                 hubert_channels=768,
                  num_phones=32,
                  num_f0_classes=512,
                  f0_min=20,
@@ -60,8 +60,7 @@ class Encoder(nn.Module):
         self.input_layer = nn.Conv1d(n_fft//2+1, channels, 1)
         self.blocks = nn.Sequential(*[
             ResBlock(channels, kernel_size, d) for d in dilations])
-        self.to_content = nn.Conv1d(channels, content_channels, 1)
-        self.to_phone = nn.Conv1d(content_channels, num_phones, 1)
+        self.to_content = nn.Conv1d(channels, hubert_channels, 1)
         self.to_f0 = nn.Conv1d(channels, num_f0_classes, 1)
 
     def forward(self, spec):
