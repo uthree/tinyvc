@@ -167,3 +167,5 @@ cython_debug/
 *.swp
 *.swo
 *.json
+
+backups/*
