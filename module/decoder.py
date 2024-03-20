@@ -137,7 +137,7 @@ class SourceNet(nn.Module):
                  frame_size=480,
                  num_harmonics=15,
                  sample_rate=24000,
-                 dilations=[1, 3, 5, 7, 9]):
+                 dilations=[1, 3, 5, 7, 9, 1]):
         super().__init__()
         self.n_fft = n_fft
         self.frame_size = frame_size
