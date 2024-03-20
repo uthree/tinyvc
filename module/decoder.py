@@ -153,7 +153,7 @@ class Synthesizer(nn.Module):
         # input layers
         self.spk_in = nn.Conv1d(spk_dim, channels[0], 1)
         self.energy_in = nn.Conv1d(1, channels[0], 1)
-        self.phone_in = nn.Conv1d(content_channels, channels[0], 1)
+        self.content_in = nn.Conv1d(content_channels, channels[0], 1)
         self.film = FiLM(channels[0], channels[0])
 
         # downsample layers
@@ -175,8 +175,8 @@ class Synthesizer(nn.Module):
         # output layer
         self.output_layer = nn.Conv1d(channels[-1], 1, 5, 1, 2, padding_mode='replicate')
 
-    def forward(self, phone, energy, spk, source_signals):
-        x = self.phone_in(phone)
+    def forward(self, content, energy, spk, source_signals):
+        x = self.content_in(content)
         c = self.energy_in(energy) + self.spk_in(spk)
         x = self.film(x, c)
 
@@ -201,12 +201,12 @@ class Decoder(nn.Module):
         self.synthesizer = Synthesizer()
         self.speaker_embedding = SpeakerEmbedding()
 
-    def infer(self, phone, energy, spk_id, f0):
+    def infer(self, content, energy, spk_id, f0):
         src = oscillate_harmonics(
                 f0,
                 self.synthesizer.frame_size,
                 self.synthesizer.sample_rate,
                 self.synthesizer.num_harmonics)
         spk = self.speaker_embedding(spk_id)
-        output = self.synthesizer(phone, energy, spk, src)
+        output = self.synthesizer(content, energy, spk, src)
         return output
