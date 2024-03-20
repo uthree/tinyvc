@@ -151,7 +151,7 @@ class SourceNet(nn.Module):
         self.to_kernel = nn.Conv1d(channels, fft_bin * 2, 1)
 
     def forward(self, content, energy):
-        x = self.content_in(content) * self.energy_in(energy)
+        x = self.content_in(content) + self.energy_in(energy)
         x = self.mid_layers(x)
         amps = torch.exp(self.to_amps(x)).clamp_max(6.0)
         k = self.to_kernel(x)
