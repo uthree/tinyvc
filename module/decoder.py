@@ -288,7 +288,7 @@ class FilterNet(nn.Module):
     def forward(self, content, energy, source):
         x = self.content_in(content)
         c = self.energy_in(energy)
-        x = x * c
+        x = x + c
 
         skips = []
         src = self.down_input(source)
