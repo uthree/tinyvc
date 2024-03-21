@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from module.dataset import Dataset
 from module.common import spectrogram, estimate_energy
-from module.loss import MultiScaleSTFTLoss
+from module.loss import MultiScaleSTFTLoss, LogMelSpectrogramLoss
 from module.encoder import Encoder
 from module.decoder import Decoder, match_features
 from module.discriminator import Discriminator
@@ -30,6 +30,7 @@ parser.add_argument('-d', '--device', default='cuda')
 parser.add_argument('-e', '--epoch', default=100000, type=int)
 parser.add_argument('-b', '--batch-size', default=16, type=int)
 parser.add_argument('--save-interval', default=100, type=int)
+parser.add_argument('-aux-type', choices=['ms-stft', 'mel'], default='mel')
 parser.add_argument('-fp16', default=False, type=bool)
 
 parser.add_argument('--weight-adv', default=1.0, type=float)
@@ -70,7 +71,10 @@ encoder.load_state_dict(torch.load(args.encoder_path, map_location=device))
 ds = Dataset(args.dataset_cache)
 dl = torch.utils.data.DataLoader(ds, batch_size=args.batch_size, shuffle=True)
 
-AuxLoss = MultiScaleSTFTLoss().to(device)
+if args.aux_type == 'ms-stft':
+    AuxLoss = MultiScaleSTFTLoss().to(device)
+else:
+    AuxLoss = LogMelSpectrogramLoss().to(device)
 
 OptG = optim.AdamW(decoder.parameters(), lr=args.learning_rate, betas=(0.8, 0.99))
 OptD = optim.AdamW(discriminator.parameters(), lr=args.learning_rate, betas=(0.8, 0.99))

@@ -36,3 +36,33 @@ class MultiScaleSTFTLoss(nn.Module):
 
             loss += ((x_spec - y_spec) ** 2).mean() + (safe_log(x_spec) - safe_log(y_spec)).abs().mean()
         return loss / num_scales
+
+
+class LogMelSpectrogramLoss(nn.Module):
+    def __init__(
+            self,
+            sample_rate=24000,
+            n_fft=1024,
+            hop_length=256,
+            n_mels=128
+            ):
+        super().__init__()
+        self.to_mel = torchaudio.transforms.MelSpectrogram(
+                sample_rate,
+                n_fft,
+                hop_length=hop_length,
+                n_mels=n_mels)
+    
+    def forward(self, x, y):
+        x = x.to(torch.float)
+        y = y.to(torch.float)
+        
+        x = safe_log(self.to_mel(x))
+        y = safe_log(self.to_mel(y))
+
+        x[x.isnan()] = 0
+        x[x.isinf()] = 0
+        y[y.isnan()] = 0
+        y[y.isinf()] = 0
+
+        return (x - y).abs().mean()
