@@ -146,12 +146,13 @@ class SourceNet(nn.Module):
         fft_bin = n_fft // 2 + 1
         self.content_in = nn.Conv1d(content_channels, channels, 1)
         self.energy_in = nn.Conv1d(1, channels, 1)
+        self.f0_in = nn.Conv1d(1, channels, 1)
         self.mid_layers = nn.Sequential(*[SourceNetLayer(channels, kernel_size, d) for d in dilations])
         self.to_amps = nn.Conv1d(channels, num_harmonics + 1, 1)
         self.to_kernel = nn.Conv1d(channels, fft_bin * 2, 1)
 
-    def forward(self, content, energy):
-        x = self.content_in(content) + self.energy_in(energy)
+    def forward(self, content, energy, f0):
+        x = self.content_in(content) + self.energy_in(energy) + self.f0_in(torch.log(F.relu(f0) + 1e-6))
         x = self.mid_layers(x)
         amps = torch.exp(self.to_amps(x)).clamp_max(6.0)
         k = self.to_kernel(x)
@@ -164,7 +165,7 @@ class SourceNet(nn.Module):
         device = content.device
         
         # estimate DSP parameters
-        amps, k_mag, k_phase = self.forward(content, energy)
+        amps, k_mag, k_phase = self.forward(content, energy, f0)
 
         # ---  sinusoid additive synthesizer
         # interpolate amplitude signals
@@ -289,9 +290,7 @@ class FilterNet(nn.Module):
         self.output_layer = nn.Conv1d(channels[-1], 1, 5, 1, 2, padding_mode='replicate')
 
     def forward(self, content, energy, source):
-        x = self.content_in(content)
-        c = self.energy_in(energy)
-        x = x * c
+        x = self.content_in(content) + self.energy_in(energy)
 
         skips = []
         src = self.down_input(source)
