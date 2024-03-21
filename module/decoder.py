@@ -31,11 +31,10 @@ def oscillate_harmonics(f0,
     device = f0.device
 
     # generate frequency of harmonics
-    mul = (torch.arange(Nh, device=device) + 1).unsqueeze(0).unsqueeze(2).expand(N, Nh, Lf)
-    fs = f0 * mul
+    mul = (torch.arange(Nh, device=device) + 1).unsqueeze(0).unsqueeze(2).expand(N, Nh, Lw)
 
     # change length to wave's
-    fs = F.interpolate(fs, Lw, mode='linear')
+    fs = F.interpolate(f0, Lw, mode='linear') * mul
 
     # unvoiced / voiced mask
     uv = F.interpolate((fs >= min_frequency).to(torch.float), Lw, mode='linear')
