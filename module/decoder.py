@@ -155,8 +155,8 @@ class SourceNet(nn.Module):
         x = self.mid_layers(x)
         amps = torch.exp(self.to_amps(x)).clamp_max(6.0)
         k = self.to_kernel(x)
-        k_real, k_imag = k.chunk(2, dim=1)
-        return amps, k_real, k_imag
+        k_mag, k_phase = k.chunk(2, dim=1)
+        return amps, k_mag, k_phase
 
     def synthesize(self, content, energy, f0):
         waveform_length = content.shape[2] * self.frame_size
@@ -164,7 +164,7 @@ class SourceNet(nn.Module):
         device = content.device
         
         # estimate DSP parameters
-        amps, k_real, k_imag = self.forward(content, energy)
+        amps, k_mag, k_phase = self.forward(content, energy)
 
         # ---  sinusoid additive synthesizer
         # interpolate amplitude signals
@@ -178,7 +178,9 @@ class SourceNet(nn.Module):
 
         # --- noise synthesizer
         # get fourier-domain complex kernel
-        kernel_stft = torch.complex(k_real, k_imag)
+        k_mag = torch.exp(k_mag)
+        k_phase = torch.cos(k_phase) + 1j * torch.sin(k_phase) 
+        kernel_stft = k_mag * k_phase
 
         # oscillate gaussian noise
         gaussian_noise = torch.randn(N, waveform_length, device=device)
