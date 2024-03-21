@@ -30,12 +30,12 @@ parser.add_argument('-d', '--device', default='cuda')
 parser.add_argument('-e', '--epoch', default=100000, type=int)
 parser.add_argument('-b', '--batch-size', default=16, type=int)
 parser.add_argument('--save-interval', default=100, type=int)
-parser.add_argument('-aux-type', choices=['ms-stft', 'mel'], default='mel')
+parser.add_argument('-aux-type', choices=['ms-stft', 'mel'], default='ms-stft')
 parser.add_argument('-fp16', default=False, type=bool)
 
 parser.add_argument('--weight-adv', default=1.0, type=float)
 parser.add_argument('--weight-dsp', default=1.0, type=float)
-parser.add_argument('--weight-aux', default=10.0, type=float)
+parser.add_argument('--weight-aux', default=45.0, type=float)
 parser.add_argument('--weight-feat', default=2.0, type=float)
 
 args = parser.parse_args()
@@ -103,7 +103,7 @@ for epoch in range(args.epoch):
             dsp_out = decoder.source_net.synthesize(z, energy, f0)
             fake = decoder.filter_net.synthesize(z, energy, dsp_out)
 
-            dsp_out = dsp_out.squeeze(1)
+            dsp_out = dsp_out.sum(dim=1)
             fake = fake.squeeze(1)
 
             loss_dsp = AuxLoss(dsp_out, wave)

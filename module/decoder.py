@@ -135,7 +135,7 @@ class SourceNet(nn.Module):
                  kernel_size=3,
                  n_fft=1920,
                  frame_size=480,
-                 num_harmonics=15,
+                 num_harmonics=14,
                  sample_rate=24000,
                  dilations=[1, 3, 5, 7, 9, 1]):
         super().__init__()
@@ -171,10 +171,10 @@ class SourceNet(nn.Module):
         amps = F.interpolate(amps, scale_factor=self.frame_size, mode='linear')
 
         # oscillate harmonics
-        h = oscillate_harmonics(f0, self.frame_size, self.sample_rate, self.num_harmonics, device=device)
+        harmonics = oscillate_harmonics(f0, self.frame_size, self.sample_rate, self.num_harmonics, device=device)
 
-        # synthesize
-        harmonics = torch.sum(h * amps, dim=1)
+        # amplitude modulation
+        harmonics = harmonics * amps
 
         # --- noise synthesizer
         # get fourier-domain complex kernel
@@ -191,10 +191,10 @@ class SourceNet(nn.Module):
         n = noise_stft * kernel_stft # In fourier domain, Multiplication means convolution.
         n = F.pad(n, [1, 0]) # pad
         noise = torch.istft(n, self.n_fft, self.frame_size, window=w)
+        noise = noise.unsqueeze(1)
 
-        # return result
-        output = harmonics + noise
-        output = output.unsqueeze(1)
+        # concatenate and return output
+        output = torch.cat([harmonics, noise], dim=1)
         return output
 
 
@@ -260,7 +260,8 @@ class FilterNet(nn.Module):
     def __init__(self,
                  channels=[384, 192, 96, 48, 24],
                  factors=[2, 3, 4, 4, 5],
-                 content_channels=768):
+                 content_channels=768,
+                 num_harmonics=14):
         super().__init__()
         self.content_channels = content_channels
 
@@ -269,7 +270,7 @@ class FilterNet(nn.Module):
         self.content_in = nn.Conv1d(content_channels, channels[0], 1)
 
         # downsample layers
-        self.down_input = nn.Conv1d(1, channels[-1], 5, 1, 2, padding_mode='replicate')
+        self.down_input = nn.Conv1d(num_harmonics + 2, channels[-1], 5, 1, 2, padding_mode='replicate')
         self.downs = nn.ModuleList([])
         cond = list(reversed(channels))
         cond_next = cond[1:] + [cond[-1]]
@@ -290,7 +291,7 @@ class FilterNet(nn.Module):
     def forward(self, content, energy, source):
         x = self.content_in(content)
         c = self.energy_in(energy)
-        x = x + c
+        x = x * c
 
         skips = []
         src = self.down_input(source)

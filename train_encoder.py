@@ -49,7 +49,7 @@ Opt = optim.AdamW(model.parameters(), lr=args.learning_rate)
 hubert = HubertModel.from_pretrained(args.hubert).to(device).eval()
 
 weight = torch.ones(model.num_f0_classes)
-weight[0] = 1e-3
+weight[0] = 1e-2
 cross_entropy_f0 = nn.CrossEntropyLoss(weight).to(device)
 
 step_count = 0
