@@ -92,7 +92,7 @@ class FiLM(nn.Module):
 
 
 class LayerNorm(nn.Module):
-    def __init__(self, channels, eps=1e-4):
+    def __init__(self, channels, eps=1e-6):
         super().__init__()
         self.scale = nn.Parameter(torch.ones(1, channels, 1))
         self.shift = nn.Parameter(torch.zeros(1, channels, 1))
@@ -106,13 +106,27 @@ class LayerNorm(nn.Module):
         return x
 
 
+class GRN(nn.Module):
+    def __init__(self, channels, eps=1e-6):
+        super().__init__()
+        self.beta = nn.Parameter(torch.zeros(1, channels, 1))
+        self.gamma = nn.Parameter(torch.zeros(1, channels, 1))
+        self.eps = eps
+    
+    def forward(self, x):
+        gx = torch.norm(x, p=2, dim=2, keepdim=True)
+        nx = gx / (gx.mean(dim=1, keepdim=True) + self.eps)
+        return self.gamma * (x * nx) + self.beta + x
+
+
 class SourceNetLayer(nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=1):
+    def __init__(self, channels, kernel_size=7, dilation=1):
         super().__init__()
         padding = (kernel_size - 1) * dilation // 2
-        self.c1 = nn.Conv1d(channels, channels, kernel_size, 1, padding, dilation=dilation, padding_mode='replicate')
+        self.c1 = nn.Conv1d(channels, channels, kernel_size, 1, padding, dilation=dilation, padding_mode='replicate', groups=channels)
         self.norm = LayerNorm(channels)
         self.c2 = nn.Conv1d(channels, channels * 2, 1)
+        self.grn = GRN(channels * 2)
         self.c3 = nn.Conv1d(channels * 2, channels, 1)
 
     def forward(self, x):
@@ -120,7 +134,8 @@ class SourceNetLayer(nn.Module):
         x = self.c1(x)
         x = self.norm(x)
         x = self.c2(x)
-        x = F.leaky_relu(x, 0.1)
+        x = F.gelu(x)
+        x = self.grn(x)
         x = self.c3(x)
         return x + res
 
@@ -131,12 +146,12 @@ class SourceNet(nn.Module):
     def __init__(self,
                  content_channels=768,
                  channels=256,
-                 kernel_size=3,
+                 kernel_size=7,
+                 num_layers=6,
                  n_fft=1920,
                  frame_size=480,
                  num_harmonics=14,
-                 sample_rate=24000,
-                 dilations=[1, 3, 5, 7, 9, 1]):
+                 sample_rate=24000):
         super().__init__()
         self.n_fft = n_fft
         self.frame_size = frame_size
@@ -146,17 +161,16 @@ class SourceNet(nn.Module):
         self.content_in = nn.Conv1d(content_channels, channels, 1)
         self.energy_in = nn.Conv1d(1, channels, 1)
         self.f0_in = nn.Conv1d(1, channels, 1)
-        self.mid_layers = nn.Sequential(*[SourceNetLayer(channels, kernel_size, d) for d in dilations])
+        self.mid_layers = nn.Sequential(*[SourceNetLayer(channels, kernel_size) for _ in range(num_layers)])
         self.to_amps = nn.Conv1d(channels, num_harmonics + 1, 1)
-        self.to_kernel = nn.Conv1d(channels, fft_bin * 2, 1)
+        self.to_kernel = nn.Conv1d(channels, fft_bin, 1)
 
     def forward(self, content, energy, f0):
         x = self.content_in(content) + self.energy_in(energy) + self.f0_in(torch.log(F.relu(f0) + 1e-6))
         x = self.mid_layers(x)
         amps = torch.exp(self.to_amps(x)).clamp_max(6.0)
-        k = self.to_kernel(x)
-        k_mag, k_phase = k.chunk(2, dim=1)
-        return amps, k_mag, k_phase
+        kernel = torch.exp(self.to_kernel(x)).clamp_max(6.0)
+        return amps, kernel
 
     def synthesize(self, content, energy, f0):
         waveform_length = content.shape[2] * self.frame_size
@@ -164,7 +178,7 @@ class SourceNet(nn.Module):
         device = content.device
         
         # estimate DSP parameters
-        amps, k_mag, k_phase = self.forward(content, energy, f0)
+        amps, kernel = self.forward(content, energy, f0)
 
         # ---  sinusoid additive synthesizer
         # interpolate amplitude signals
@@ -177,18 +191,15 @@ class SourceNet(nn.Module):
         harmonics = harmonics * amps
 
         # --- noise synthesizer
-        # get fourier-domain complex kernel
-        k_mag = torch.exp(k_mag).clamp_max(6.0)
-        k_phase = torch.cos(k_phase) + 1j * torch.sin(k_phase) 
-        kernel_stft = k_mag * k_phase
-
         # oscillate gaussian noise
         gaussian_noise = torch.randn(N, waveform_length, device=device)
 
         # calculate convolution in fourier-domain
+        # Since the input is an aperiodic signal such as Gaussian noise,
+        # there is no need to consider the phase on the kernel side.
         w = torch.hann_window(self.n_fft).to(device) # get window
         noise_stft = torch.stft(gaussian_noise, self.n_fft, hop_length=self.frame_size, window=w, return_complex=True)[:, :, 1:]
-        n = noise_stft * kernel_stft # In fourier domain, Multiplication means convolution.
+        n = noise_stft * kernel # In fourier domain, Multiplication means convolution.
         n = F.pad(n, [1, 0]) # pad
         noise = torch.istft(n, self.n_fft, self.frame_size, window=w)
         noise = noise.unsqueeze(1)

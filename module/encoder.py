@@ -6,7 +6,7 @@ from .common import spectrogram
 
 
 class LayerNorm(nn.Module):
-    def __init__(self, channels, eps=1e-4):
+    def __init__(self, channels, eps=1e-6):
         super().__init__()
         self.scale = nn.Parameter(torch.ones(1, channels, 1))
         self.shift = nn.Parameter(torch.zeros(1, channels, 1))
@@ -20,13 +20,27 @@ class LayerNorm(nn.Module):
         return x
 
 
+class GRN(nn.Module):
+    def __init__(self, channels, eps=1e-6):
+        super().__init__()
+        self.beta = nn.Parameter(torch.zeros(1, channels, 1))
+        self.gamma = nn.Parameter(torch.zeros(1, channels, 1))
+        self.eps = eps
+    
+    def forward(self, x):
+        gx = torch.norm(x, p=2, dim=2, keepdim=True)
+        nx = gx / (gx.mean(dim=1, keepdim=True) + self.eps)
+        return self.gamma * (x * nx) + self.beta + x
+
+
 class ResBlock(nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=1):
+    def __init__(self, channels, kernel_size=7, dilation=1):
         super().__init__()
         padding = (kernel_size - 1) * dilation // 2
-        self.c1 = nn.Conv1d(channels, channels, kernel_size, 1, padding, dilation=dilation, padding_mode='replicate')
+        self.c1 = nn.Conv1d(channels, channels, kernel_size, 1, padding, dilation=dilation, padding_mode='replicate', groups=channels)
         self.norm = LayerNorm(channels)
         self.c2 = nn.Conv1d(channels, channels * 2, 1)
+        self.grn = GRN(channels * 2)
         self.c3 = nn.Conv1d(channels * 2, channels, 1)
 
     def forward(self, x):
@@ -34,7 +48,8 @@ class ResBlock(nn.Module):
         x = self.c1(x)
         x = self.norm(x)
         x = self.c2(x)
-        x = F.leaky_relu(x, 0.1)
+        x = F.gelu(x)
+        x = self.grn(x)
         x = self.c3(x)
         return x + res
 
@@ -42,9 +57,9 @@ class ResBlock(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, n_fft=1920,
                  hop_size=480,
-                 channels=256,
-                 dilations=[1, 3, 5, 7, 9, 1],
-                 kernel_size=3,
+                 channels=512,
+                 num_layers=6,
+                 kernel_size=7,
                  hubert_channels=768,
                  num_phones=32,
                  num_f0_classes=512,
@@ -58,8 +73,7 @@ class Encoder(nn.Module):
         self.f0_estimate_topk = f0_estimate_topk
 
         self.input_layer = nn.Conv1d(n_fft//2+1, channels, 1)
-        self.blocks = nn.Sequential(*[
-            ResBlock(channels, kernel_size, d) for d in dilations])
+        self.blocks = nn.Sequential(*[ResBlock(channels, kernel_size) for _ in range(num_layers)])
         self.to_content = nn.Conv1d(channels, hubert_channels, 1)
         self.to_f0 = nn.Conv1d(channels, num_f0_classes, 1)
 
