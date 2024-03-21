@@ -65,48 +65,40 @@ class MultiPeriodicDiscriminator(nn.Module):
         return logits, feats
 
 
-class DiscriminatorS(nn.Module):
-    def __init__(self, scale=1, channels=32, num_layers=6, max_channels=256, max_groups=8, use_spectral_norm=False):
+class DiscriminatorR(nn.Module):
+    def __init__(self, resolution=128, channels=16, num_layers=4):
         super().__init__()
-        norm_f = nn.utils.weight_norm if use_spectral_norm == False else nn.utils.spectral_norm
-
-        if scale == 1:
-            self.pool = nn.Identity()
-        else:
-            self.pool = nn.AvgPool1d(scale)
-
+        norm_f = nn.utils.weight_norm
+        self.convs = nn.ModuleList([norm_f(nn.Conv2d(1, channels, (7, 3), (2, 1), (3, 1)))])
+        self.hop_size = resolution
+        self.n_fft = resolution * 4
         c = channels
-        g = 1
-        convs = [nn.Conv1d(1, c, 15, 1, 7, padding_mode='replicate')]
         for _ in range(num_layers):
-            g = min(g * 2, max_groups)
-            c_next = min(c * 2, max_channels)
-            convs.append(nn.Conv1d(c, c_next, 41, 2, 20, groups=g, padding_mode='replicate'))
-            c = c_next
-
-        self.convs = nn.ModuleList([norm_f(c) for c in convs])
-        self.post = norm_f(nn.Conv1d(c, 1, 3, 1, 1, padding_mode='replicate'))
+            self.convs.append(norm_f(nn.Conv2d(c, c*2, (5, 3), (2, 1), (2, 1))))
+            c = c * 2
+        self.post = norm_f(nn.Conv2d(c, 1, 3, 1, 1))
 
     def forward(self, x):
-        fmap = []
-        x = self.pool(x)
-        fmap.append(x)
+        x = x.mean(dim=1)
+        w = torch.hann_window(self.n_fft).to(x.device)
+        x = torch.stft(x, self.n_fft, self.hop_size, window=w, return_complex=True).abs()
+        x = x.unsqueeze(1)
+        feats = []
         for l in self.convs:
             x = l(x)
-            x = F.leaky_relu(x, 0.1)
-            fmap.append(x)
+            F.leaky_relu(x, 0.1)
+            feats.append(x)
         x = self.post(x)
-        fmap.append(x)
-        return x, fmap
+        feats.append(x)
+        return x, feats
 
 
-class MultiScaleDiscriminator(nn.Module):
-    def __init__(self, scales, channels, max_channels, max_groups, num_layers):
+class MultiResolutionDiscriminator(nn.Module):
+    def __init__(self, resolutions, channels, num_layers):
         super().__init__()
         self.sub_discs = nn.ModuleList([])
-        for i, s in enumerate(scales):
-            use_spectral_norm = (i == 0)
-            self.sub_discs.append(DiscriminatorS(s, channels, num_layers, max_channels, max_groups, use_spectral_norm))
+        for r in resolutions:
+            self.sub_discs.append(DiscriminatorR(r, channels, num_layers))
 
     def forward(self, x):
         feats = []
@@ -120,22 +112,20 @@ class MultiScaleDiscriminator(nn.Module):
 
 class Discriminator(nn.Module):
     def __init__(self,
-                 scales=[1, 2, 3],
-                 periods=[2, 3, 5, 7, 11],
+                 resolutions=[128, 256, 512],
+                 periods=[1, 2, 3, 5, 7, 11],
                  mpd_num_layers=4,
-                 msd_num_layers=6,
+                 mrd_num_layers=4,
                  mpd_channels=32,
-                 msd_channels=32,
+                 mrd_channels=16,
                  mpd_max_channels=256,
-                 msd_max_groups=8,
-                 msd_max_channels=256,
                  ):
         super().__init__()
         self.MPD = MultiPeriodicDiscriminator(periods, mpd_channels, mpd_max_channels, mpd_num_layers)
-        self.MSD = MultiScaleDiscriminator(scales, msd_channels, msd_max_channels, msd_max_groups, msd_num_layers)
+        self.MRD = MultiResolutionDiscriminator(resolutions, mrd_channels, mrd_num_layers)
 
     def forward(self, x):
         x = x.unsqueeze(1)
         mpd_logits, mpd_feats = self.MPD(x)
-        msd_logits, msd_feats = self.MSD(x)
-        return mpd_logits + msd_logits, mpd_feats + msd_feats
+        mrd_logits, mrd_feats = self.MRD(x)
+        return mpd_logits + mrd_logits, mpd_feats + mrd_feats
