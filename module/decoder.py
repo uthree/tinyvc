@@ -178,7 +178,7 @@ class SourceNet(nn.Module):
 
         # --- noise synthesizer
         # get fourier-domain complex kernel
-        k_mag = torch.exp(k_mag)
+        k_mag = torch.exp(k_mag).clamp_max(6.0)
         k_phase = torch.cos(k_phase) + 1j * torch.sin(k_phase) 
         kernel_stft = k_mag * k_phase
 
@@ -190,10 +190,10 @@ class SourceNet(nn.Module):
         noise_stft = torch.stft(gaussian_noise, self.n_fft, hop_length=self.frame_size, window=w, return_complex=True)[:, :, 1:]
         n = noise_stft * kernel_stft # In fourier domain, Multiplication means convolution.
         n = F.pad(n, [1, 0]) # pad
-        noises = torch.istft(n, self.n_fft, self.frame_size, window=w)
+        noise = torch.istft(n, self.n_fft, self.frame_size, window=w)
 
         # return result
-        output = noises + harmonics
+        output = harmonics + noise
         output = output.unsqueeze(1)
         return output
 
