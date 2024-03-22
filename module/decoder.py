@@ -176,6 +176,7 @@ class SourceNet(nn.Module):
         waveform_length = content.shape[2] * self.frame_size
         N = content.shape[0]
         device = content.device
+        dtype = content.dtype
         
         # estimate DSP parameters
         amps, kernel = self.forward(content, energy, f0)
@@ -192,7 +193,8 @@ class SourceNet(nn.Module):
 
         # --- noise synthesizer
         # oscillate gaussian noise
-        gaussian_noise = torch.randn(N, waveform_length, device=device)
+        gaussian_noise = torch.randn(N, waveform_length, device=device).to(torch.float) # to fp32
+        kernel = kernel.to(torch.float) # to fp32
 
         # calculate convolution in fourier-domain
         # Since the input is an aperiodic signal such as Gaussian noise,
@@ -201,7 +203,7 @@ class SourceNet(nn.Module):
         noise_stft = torch.stft(gaussian_noise, self.n_fft, hop_length=self.frame_size, window=w, return_complex=True)[:, :, 1:]
         n = noise_stft * kernel # In fourier domain, Multiplication means convolution.
         n = F.pad(n, [1, 0]) # pad
-        noise = torch.istft(n, self.n_fft, self.frame_size, window=w)
+        noise = torch.istft(n, self.n_fft, self.frame_size, window=w).to(dtype)
         noise = noise.unsqueeze(1)
 
         # concatenate and return output
