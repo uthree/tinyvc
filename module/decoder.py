@@ -218,10 +218,9 @@ class Downsample(nn.Module):
         self.c1 = nn.Conv1d(input_channels, input_channels, 3, 1, 1, dilation=1, padding_mode='replicate')
         self.c2 = nn.Conv1d(input_channels, input_channels, 3, 1, 2, dilation=2, padding_mode='replicate')
         self.c3 = nn.Conv1d(input_channels, output_channels, 3, 1, 4, dilation=4, padding_mode='replicate')
-        self.pool = nn.AvgPool1d(factor * 2, factor)
+        self.pool = nn.AvgPool1d(factor)
 
     def forward(self, x):
-        x = F.pad(x, [self.factor, 0], mode='replicate')
         x = self.pool(x)
         res = self.down_res(x)
         x = F.leaky_relu(x, 0.1)
