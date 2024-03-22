@@ -21,6 +21,7 @@ parser.add_argument('-decp', '--decoder-path', default='./models/decoder.pt')
 parser.add_argument('-i', '--input', default=0, type=int)
 parser.add_argument('-o', '--output', default=0, type=int)
 parser.add_argument('-l', '--loopback', default=-1, type=int)
+parser.add_argument('-idx', '--index', default='NONE')
 parser.add_argument('-p', '--pitch-shift', default=0, type=float)
 parser.add_argument('-t', '--target', default=0, type=int)
 parser.add_argument('-c', '--chunk', default=1920, type=int)
@@ -64,8 +65,16 @@ stream_loopback = audio.open(
 BUFFER_SIZE = args.buffer * args.chunk
 CHUNK_SIZE = args.chunk
 
-# encoder speaker
-spk = convertor.get_speaker_embedding(args.target, device)
+# load target
+if args.index == 'NONE':
+    wf, sr = torchaudio.load(args.target)
+    wf = resample(wf, sr, 24000)
+    tgt = convertor.encode_target(wf)
+else:
+    tgt = torch.load(args.index).to(device)
+
+if not os.path.exists(args.outputs):
+    os.mkdir(args.outputs)
 
 pitch_shift = args.pitch_shift
 
@@ -81,7 +90,7 @@ while True:
     chunk = chunk.unsqueeze(0) / 32768
     
     chunk = gain(chunk, args.input_gain)
-    chunk, buffer = convertor.convert(chunk, buffer, spk, pitch_shift, device)
+    chunk, buffer = convertor.convert(chunk, buffer, tgt, pitch_shift, device)
     chunk = gain(chunk, args.output_gain)
 
     chunk = chunk.cpu().numpy() * 32768

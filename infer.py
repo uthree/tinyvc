@@ -15,11 +15,13 @@ from module.convertor import Convertor
 from module.common import estimate_energy
 from module.instance_norm import instance_norm
 
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', '--inputs', default="./inputs/")
 parser.add_argument('-o', '--outputs', default="./outputs/")
 parser.add_argument('-encp', '--encoder-path', default='./models/encoder.pt')
 parser.add_argument('-decp', '--decoder-path', default='./models/decoder.pt')
+parser.add_argument('-idx', '--index', default='NONE')
 parser.add_argument('-t', '--target', default='target.wav')
 parser.add_argument('-d', '--device', default='cpu')
 parser.add_argument('-p', '--pitch-shift', default=0.0, type=float)
@@ -40,9 +42,12 @@ chunk_size = args.chunk_size
 buffer_size = args.buffer_size * chunk_size
 
 # load target
-wf, sr = torchaudio.load(args.target)
-wf = resample(wf, sr, 24000)
-tgt = convertor.encode_target(wf)
+if args.index == 'NONE':
+    wf, sr = torchaudio.load(args.target)
+    wf = resample(wf, sr, 24000)
+    tgt = convertor.encode_target(wf)
+else:
+    tgt = torch.load(args.index).to(device)
 
 if not os.path.exists(args.outputs):
     os.mkdir(args.outputs)
