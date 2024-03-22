@@ -247,7 +247,6 @@ class Upsample(nn.Module):
         self.c5 = nn.Conv1d(input_channels, output_channels, 1)
 
     def forward(self, x, c):
-        c = F.interpolate(c, scale_factor=self.factor, mode='linear')
         x = F.interpolate(x, scale_factor=self.factor, mode='linear')
         res = x
         x = F.leaky_relu(x, 0.1)
@@ -274,46 +273,40 @@ class FilterNet(nn.Module):
                  content_channels=768,
                  num_harmonics=14):
         super().__init__()
-        self.content_channels = content_channels
-
-        # input layers
-        self.energy_in = nn.Conv1d(1, channels[0], 1)
+        # input layer 
         self.content_in = nn.Conv1d(content_channels, channels[0], 1)
+        self.energy_in = nn.Conv1d(1, channels[0], 1)
 
-        # downsample layers
-        self.down_input = nn.Conv1d(num_harmonics + 2, channels[-1], 5, 1, 2, padding_mode='replicate')
+        # donwsamples
         self.downs = nn.ModuleList([])
-        cond = list(reversed(channels))
-        cond_next = cond[1:] + [cond[-1]]
-        for c, c_n, f in zip(cond, cond_next, reversed(factors)):
-            self.downs.append(
-                    Downsample(c, c_n, f))
+        self.downs.append(nn.Conv1d(num_harmonics + 2, channels[-1], 5, 1, 2, padding_mode='replicate'))
+        cs = list(reversed(channels[1:]))
+        ns = cs[1:] + [channels[0]]
+        fs = list(reversed(factors[1:]))
+        for c, n, f in zip(cs, ns, fs):
+            self.downs.append(Downsample(c, n, f))
 
-        # upsample layers
+        # upsamples
         self.ups = nn.ModuleList([])
-        up = channels
-        up_next = channels[1:] + [channels[-1]]
-        for u, u_n, c_n, f in zip(up, up_next, reversed(cond_next), factors):
-            self.ups.append(Upsample(u, u_n, c_n, f))
-
-        # output layer
+        cs = channels
+        ns = channels[1:] + [channels[-1]]
+        fs = factors
+        for c, n, f in zip(cs, ns, fs):
+            self.ups.append(Upsample(c, n, c, f))
         self.output_layer = nn.Conv1d(channels[-1], 1, 5, 1, 2, padding_mode='replicate')
 
     def forward(self, content, energy, source):
         x = self.content_in(content) + self.energy_in(energy)
+        src = source
 
         skips = []
-        src = self.down_input(source)
-        for d in self.downs:
-            src = d(src)
+        for down in self.downs:
+            src = down(src)
             skips.append(src)
 
-        # upsamples
-        for u, s in zip(self.ups, reversed(skips)):
-            x = u(x, s)
-
-        x = self.output_layer(x)
-        return x
+        for up, s in zip(self.ups, reversed(skips)):
+            x = up(x, s)
+        return self.output_layer(x)
 
     def synthesize(self, content, energy, source):
         return self.forward(content, energy, source)
