@@ -73,9 +73,6 @@ if args.index == 'NONE':
 else:
     tgt = torch.load(args.index).to(device)
 
-if not os.path.exists(args.outputs):
-    os.mkdir(args.outputs)
-
 pitch_shift = args.pitch_shift
 
 # initialize buffer
