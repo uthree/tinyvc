@@ -21,13 +21,14 @@ parser.add_argument('-i', '--inputs', default="./inputs/")
 parser.add_argument('-o', '--outputs', default="./outputs/")
 parser.add_argument('-encp', '--encoder-path', default='./models/encoder.pt')
 parser.add_argument('-decp', '--decoder-path', default='./models/decoder.pt')
+parser.add_argument('-f0-est', '--f0-estimation', default='default')
 parser.add_argument('-idx', '--index', default='NONE')
 parser.add_argument('-t', '--target', default='target.wav')
 parser.add_argument('-d', '--device', default='cpu')
 parser.add_argument('-p', '--pitch-shift', default=0.0, type=float)
 parser.add_argument('-c', '--chunk_size', default=1920, type=int)
 parser.add_argument('-b', '--buffer_size', default=4, type=int)
-parser.add_argument('--no-chunking', default=False, type=bool)
+parser.add_argument('-nc', '--no-chunking', default=False, type=bool)
 
 args = parser.parse_args()
 
@@ -66,7 +67,7 @@ for i, path in enumerate(paths):
     
     if args.no_chunking:
         wf = wf.to(device)
-        wf = convertor.convert_without_chunking(wf, tgt, args.pitch_shift, device)
+        wf = convertor.convert_without_chunking(wf, tgt, args.pitch_shift, device, args.f0_estimation)
         wf = wf.cpu()
     else:
         chunks = torch.split(wf, chunk_size, dim=1)
@@ -76,7 +77,7 @@ for i, path in enumerate(paths):
             if chunk.shape[1] < chunk_size:
                 chunk = torch.cat([chunk, torch.zeros(1, chunk_size - chunk.shape[1])], dim=1)
             chunk = chunk.to(device)
-            out, buffer = convertor.convert(chunk, buffer, tgt, args.pitch_shift, device)
+            out, buffer = convertor.convert(chunk, buffer, tgt, args.pitch_shift, device, args.f0_estimation)
             out = out.cpu()
             results.append(out)
         wf = torch.cat(results, dim=1)

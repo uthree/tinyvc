@@ -61,7 +61,6 @@ class Encoder(nn.Module):
                  num_layers=6,
                  kernel_size=7,
                  hubert_channels=768,
-                 num_phones=32,
                  num_f0_classes=512,
                  f0_min=20,
                  f0_estimate_topk=2):

@@ -2,10 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 from .encoder import Encoder
 from .decoder import Decoder, match_features
-from .common import estimate_energy
+from .common import estimate_energy, estimate_f0
 
 
 # Realtime convertor
@@ -24,7 +23,7 @@ class Convertor(nn.Module):
         output_buffer = torch.zeros(1, buffer_size, device=device)
         return (input_buffer, output_buffer)
 
-    def convert_without_chunking(self, wf, tgt, pitch_shift, device=torch.device('cpu')):
+    def convert_without_chunking(self, wf, tgt, pitch_shift, device=torch.device('cpu'), f0_estimation='default'):
         frame_size = self.decoder.frame_size
         sample_rate = self.decoder.sample_rate
 
@@ -34,6 +33,8 @@ class Convertor(nn.Module):
             # estimate energy, encode content, estimate pitch
             energy = estimate_energy(x, frame_size)
             z, f0 = self.encoder.infer(x)
+            if f0_estimation != 'default':
+                f0 = estimate_f0(x, algorithm=f0_estimation)
 
             # pitch shift
             scale = 12 * torch.log2(f0 / 440)
@@ -50,7 +51,7 @@ class Convertor(nn.Module):
             return y
 
 
-    def convert(self, chunk, buffer, tgt, pitch_shift=0, device=torch.device('cpu')):
+    def convert(self, chunk, buffer, tgt, pitch_shift=0, device=torch.device('cpu'), f0_estimation='default'):
         frame_size = self.decoder.frame_size
         sample_rate = self.decoder.sample_rate
         chunk_size = chunk.shape[1]
@@ -65,6 +66,8 @@ class Convertor(nn.Module):
             # estimate energy, encode content, estimate pitch
             energy = estimate_energy(x, frame_size)
             z, f0 = self.encoder.infer(x)
+            if f0_estimation != 'default':
+                f0 = estimate_f0(x, algorithm=f0_estimation)
 
             # pitch shift
             scale = 12 * torch.log2(f0 / 440)
