@@ -118,7 +118,7 @@ for epoch in range(args.epoch):
                     loss_adv += (logit ** 2).mean() / len(logits)
                 loss_feat = 0
                 for r, f in zip(feats_real, feats_fake):
-                    loss_feat += (r - f).abs().mean() / len(feats_fake)
+                    loss_feat += (r - f).abs().mean()
                 loss_g = loss_adv * args.weight_adv + loss_aux * args.weight_aux + loss_feat * args.weight_feat + loss_dsp * args.weight_dsp
             else:
                 loss_g = loss_aux * args.weight_aux + loss_dsp * args.weight_dsp
