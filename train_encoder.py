@@ -69,6 +69,9 @@ for epoch in range(args.epoch):
             hubert_features = hubert_features.transpose(1, 2)
             f0_label = model.freq2id(f0).squeeze(1)
 
+            # data argumentation
+            wave = wave * torch.rand(N, 1, device=device) * 2
+
             # estimate
             z, f0_out = model(spectrogram(wave, model.n_fft, model.hop_size))
 
