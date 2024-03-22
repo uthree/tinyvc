@@ -279,7 +279,7 @@ class FilterNet(nn.Module):
 
         # donwsamples
         self.downs = nn.ModuleList([])
-        self.downs.append(nn.Conv1d(num_harmonics + 2, channels[-1], 5, 1, 2, padding_mode='replicate'))
+        self.downs.append(nn.Conv1d(num_harmonics + 2, channels[-1], 3, 1, 1, padding_mode='replicate'))
         cs = list(reversed(channels[1:]))
         ns = cs[1:] + [channels[0]]
         fs = list(reversed(factors[1:]))
@@ -293,7 +293,7 @@ class FilterNet(nn.Module):
         fs = factors
         for c, n, f in zip(cs, ns, fs):
             self.ups.append(Upsample(c, n, c, f))
-        self.output_layer = nn.Conv1d(channels[-1], 1, 5, 1, 2, padding_mode='replicate')
+        self.output_layer = nn.Conv1d(channels[-1], 1, 7, 1, 3, padding_mode='replicate')
 
     def forward(self, content, energy, source):
         x = self.content_in(content) + self.energy_in(energy)
