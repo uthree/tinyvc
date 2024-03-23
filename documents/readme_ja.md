@@ -2,6 +2,9 @@
 ![](../images/tinyvc_logo.png)
 (このリポジトリは実験段階のものです。内容は予告なく変更される場合があります。)
 
+## 学習済みモデルをダウンロード
+[学習済みモデル](https://huggingface.co/uthree/tinyvc/tree/main)をダウンロードすることで、すぐにこのボイスチェンジャを試すことができます。
+
 ## モデル構造
 ![](../images/tinyvc_architecture.png)
 

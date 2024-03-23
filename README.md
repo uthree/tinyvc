@@ -6,6 +6,9 @@
 ## Other languages
 - [日本語](./documents/readme_ja.md)
 
+## Download pretrained model
+Pretrained models are available [here](https://huggingface.co/uthree/tinyvc/tree/main)!
+
 ## Model structure
 ![](./images/tinyvc_architecture.png)
 
