@@ -78,7 +78,7 @@ for epoch in range(args.epoch):
             # loss
             loss_distill = (z - F.interpolate(hubert_features, z.shape[2])).abs().mean()
             loss_f0 = cross_entropy_f0(f0_out, f0_label)
-            loss = loss_f0 + loss_distill
+            loss = loss_f0 + loss_distill * 45
 
         scaler.scale(loss).backward()
         scaler.step(Opt)
