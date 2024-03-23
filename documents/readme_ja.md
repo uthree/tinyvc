@@ -1,9 +1,9 @@
-# TinyVC : 蒸留モデルとk近傍法に基づく高速な声質変換
+# TinyVC : Towards AI voice conversion on CPU
+![](../images/tinyvc_logo.png)
 (このリポジトリは実験段階のものです。内容は予告なく変更される場合があります。)
 
 ## モデル構造
-![Architecture](../images/tinyvc_architecture.png)
-デコーダーの構造はFastSVC等を参考に設計。
+![](../images/tinyvc_architecture.png)
 
 ## 特徴
 - リアルタイム変換
