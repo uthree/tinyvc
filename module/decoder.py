@@ -147,7 +147,7 @@ class SourceNet(nn.Module):
                  content_channels=768,
                  channels=256,
                  kernel_size=7,
-                 num_layers=6,
+                 num_layers=3,
                  n_fft=1920,
                  frame_size=480,
                  num_harmonics=14,
