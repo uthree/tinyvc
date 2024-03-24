@@ -9,7 +9,7 @@ from torchaudio.functional import resample
 
 from tqdm import tqdm
 
-from .f0_estimation import estimate_f0
+from module.f0_estimation import estimate_f0
 
 
 parser = argparse.ArgumentParser(description="preprocess")
