@@ -14,7 +14,6 @@ from module.loss import MultiScaleSTFTLoss, LogMelSpectrogramLoss
 from module.encoder import Encoder
 from module.decoder import Decoder, match_features
 from module.discriminator import Discriminator
-from module.instance_norm import instance_norm
 
 
 parser = argparse.ArgumentParser(description="train voice conversion model")
