@@ -13,7 +13,6 @@ from module.encoder import Encoder
 from module.decoder import Decoder
 from module.convertor import Convertor
 from module.common import estimate_energy
-from module.instance_norm import instance_norm
 
 
 parser = argparse.ArgumentParser()

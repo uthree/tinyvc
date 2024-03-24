@@ -157,6 +157,7 @@ class SourceNet(nn.Module):
         self.frame_size = frame_size
         self.num_harmonics = num_harmonics
         self.sample_rate = sample_rate
+        self.content_channels = content_channels
         fft_bin = n_fft // 2 + 1
         self.content_in = nn.Conv1d(content_channels, channels, 1)
         self.energy_in = nn.Conv1d(1, channels, 1)

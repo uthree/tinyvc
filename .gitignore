@@ -167,5 +167,6 @@ cython_debug/
 *.swp
 *.swo
 *.json
+*.onnx
 
 backups/*
