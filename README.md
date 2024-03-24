@@ -14,7 +14,6 @@ Pretrained models are available [here](https://huggingface.co/uthree/tinyvc/tree
 
 ## Features
 - Real-time conversion
-- Low latency (approximately 0.2 seconds, may vary depending on environment and optimization.)
 - Phase and pitch are stable (based on source filter model)
 - Speaker style conversion using k-nearest neighbor method
 - Fully F0 controllable speech synthesis with additive synthesizer
