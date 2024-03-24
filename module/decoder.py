@@ -168,8 +168,8 @@ class SourceNet(nn.Module):
     def forward(self, content, energy, f0):
         x = self.content_in(content) + self.energy_in(energy) + self.f0_in(torch.log(F.relu(f0) + 1e-6))
         x = self.mid_layers(x)
-        amps = torch.exp(self.to_amps(x)).clamp_max(6.0)
-        kernel = torch.exp(self.to_kernel(x)).clamp_max(6.0)
+        amps = F.elu(self.to_amps(x)) + 1
+        kernel = F.elu(self.to_kernel(x)) + 1
         return amps, kernel
 
     def synthesize(self, content, energy, f0):

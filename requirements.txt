@@ -6,3 +6,4 @@ onnx
 transformers
 pyaudio
 pyworld
+torchfcpe

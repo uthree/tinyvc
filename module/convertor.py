@@ -4,7 +4,8 @@ import torch.nn.functional as F
 
 from .encoder import Encoder
 from .decoder import Decoder, match_features
-from .common import estimate_energy, estimate_f0
+from .common import estimate_energy
+from .f0_estimation import estimate_f0
 
 
 # Realtime convertor
