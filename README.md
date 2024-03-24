@@ -95,6 +95,7 @@ python3 infer.py -idx <dictionary file>
 ### Additional options
 - You can change the calculation device with `-d <device name>`. Although it may not make much sense since it is originally high speed.
 - Pitch shift can be performed with `-p <scale>`. Useful for voice conversion between men and women. 12 raises it one octave.
+- add `--no-chunking True` to incerease quality, but this mode requires more RAM.
 
 ## Real-time inference with pyaudio (feature in testing stage)
 1. Check the ID of your audio device
