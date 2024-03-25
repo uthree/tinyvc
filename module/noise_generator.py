@@ -22,10 +22,11 @@ class NoiseGenerator():
 
     def _add_noise(self, x):
         # x: [Length]
-        noise = random.choice(self.waveforms)
-        s = random.randint(0, noise.shape[0] - x.shape[0] - 1)
-        noise = noise[s:s+x.shape[0]].to(x.device)
-        x = x + noise * random.random()
+        if random.random() < 0.3:
+            noise = random.choice(self.waveforms)
+            s = random.randint(0, noise.shape[0] - x.shape[0] - 1)
+            noise = noise[s:s+x.shape[0]].to(x.device)
+            x = x + noise * random.random()
         return x
 
     def add_noise(self, xs):
