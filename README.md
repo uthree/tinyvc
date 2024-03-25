@@ -112,6 +112,3 @@ python3 infer_streaming.py -i <input device ID> -o <output device ID> -l <loopba
 - [FastSVC](https://arxiv.org/abs/2011.05731)
 - [kNN-VC](https://arxiv.org/abs/2305.18975)
 - [WavLM](https://arxiv.org/pdf/2110.13900.pdf) (Fig. 2)
-- [StreamVC](https://arxiv.org/abs/2401.03078v1)
-- [Hifi-GAN](https://arxiv.org/abs/2010.05646)
-- [AdaIN](https://arxiv.org/abs/1703.06868)
