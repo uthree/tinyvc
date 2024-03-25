@@ -43,7 +43,7 @@ def estimate_f0_harvest(wf, sample_rate=24000, segment_size=480, f0_min=20, f0_m
         return f0
     elif wf.ndim == 2:
         waves = wf.split(1, dim=0)
-        pitchs = [estimate_f0_dio(wave[0], sample_rate, segment_size) for wave in waves]
+        pitchs = [estimate_f0_harvest(wave[0], sample_rate, segment_size) for wave in waves]
         pitchs = torch.stack(pitchs, dim=0)
         return pitchs
 
