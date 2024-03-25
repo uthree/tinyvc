@@ -58,7 +58,7 @@ class Encoder(nn.Module):
     def __init__(self, n_fft=1920,
                  hop_size=480,
                  channels=512,
-                 num_layers=6,
+                 dilations=[1, 1, 3, 1, 9, 1],
                  kernel_size=7,
                  hubert_channels=768,
                  num_f0_classes=512,
@@ -72,7 +72,7 @@ class Encoder(nn.Module):
         self.f0_estimate_topk = f0_estimate_topk
 
         self.input_layer = nn.Conv1d(n_fft//2+1, channels, 1)
-        self.blocks = nn.Sequential(*[ResBlock(channels, kernel_size) for _ in range(num_layers)])
+        self.blocks = nn.Sequential(*[ResBlock(channels, kernel_size, d) for d in dilations])
         self.to_content = nn.Conv1d(channels, hubert_channels, 1)
         self.to_f0 = nn.Conv1d(channels, num_f0_classes, 1)
 

@@ -13,11 +13,13 @@ from tqdm import tqdm
 from module.dataset import Dataset
 from module.encoder import Encoder
 from module.common import spectrogram
+from module.noise_generator import NoiseGenerator
 from transformers import  HubertModel
 
 parser = argparse.ArgumentParser(description="distillation of HuBERT-Base 4th layer / Pitch Estimation")
 
 parser.add_argument('--dataset-cache', default='dataset_cache')
+parser.add_argument('--noises', default='NONE')
 parser.add_argument('--hubert', default='rinna/japanese-hubert-base')
 parser.add_argument('-path', '--path', default='models/encoder.pt')
 parser.add_argument('-lr', '--learning-rate', type=float, default=1e-4)
@@ -52,6 +54,13 @@ weight = torch.ones(model.num_f0_classes)
 weight[0] = 1e-3
 cross_entropy_f0 = nn.CrossEntropyLoss(weight).to(device)
 
+# for noise reduction
+if args.noises != None:
+    add_noise = True
+    noise_generator = NoiseGenerator(args.noises)
+else:
+    add_noise = False
+
 step_count = 0
 for epoch in range(args.epoch):
     tqdm.write(f"Epoch #{epoch}")
@@ -71,6 +80,10 @@ for epoch in range(args.epoch):
 
             # data argumentation
             wave = wave * torch.rand(N, 1, device=device) * 2
+
+            # add noise(optional)
+            if add_noise:
+                wave = noise_generator.add_noise(wave)
 
             # estimate
             z, f0_out = model(spectrogram(wave, model.n_fft, model.hop_size))
