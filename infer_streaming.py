@@ -68,7 +68,7 @@ CHUNK_SIZE = args.chunk
 # load target
 if args.index == 'NONE':
     wf, sr = torchaudio.load(args.target)
-    wf = resample(wf, sr, 24000)
+    wf = resample(wf, sr, 24000).to(device)
     tgt = convertor.encode_target(wf)
 else:
     tgt = torch.load(args.index).to(device)
