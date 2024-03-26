@@ -27,7 +27,7 @@ parser.add_argument('-step', '--max-steps', default=300000, type=int)
 parser.add_argument('-lr', '--learning-rate', type=float, default=1e-4)
 parser.add_argument('-d', '--device', default='cuda')
 parser.add_argument('-e', '--epoch', default=100000, type=int)
-parser.add_argument('-b', '--batch-size', default=16, type=int)
+parser.add_argument('-b', '--batch-size', default=8, type=int)
 parser.add_argument('--save-interval', default=100, type=int)
 parser.add_argument('-aux-type', choices=['ms-stft', 'mel'], default='ms-stft')
 parser.add_argument('-fp16', default=False, type=bool)
@@ -97,16 +97,20 @@ for epoch in range(args.epoch):
         OptG.zero_grad()
         with torch.cuda.amp.autocast(enabled=args.fp16):
             z, f0 = encoder.infer(wave)
-            z = match_features(z, z).detach()
+            z_recon = match_features(z, z).detach()
+            z_fake = match_features(z, torch.roll(z, 1, dims=0))
+            f0_fake = f0 * torch.rand(N, 1, 1, device=device) * 2
             energy = estimate_energy(wave, decoder.frame_size)
-            dsp_out = decoder.source_net.synthesize(z, energy, f0)
-            fake = decoder.filter_net.synthesize(z, energy, dsp_out)
-
-            dsp_out = dsp_out.sum(dim=1)
+            dsp_out_recon = decoder.source_net.synthesize(z_recon, energy, f0)
+            recon = decoder.filter_net.synthesize(z_recon, energy, dsp_out_recon)
+            dsp_out_fake = decoder.source_net.synthesize(z_fake, energy, f0_fake)
+            fake = decoder.filter_net.synthesize(z_fake, energy, dsp_out_fake)
+            
+            recon = recon.squeeze(1)
             fake = fake.squeeze(1)
 
-            loss_dsp = AuxLoss(dsp_out, wave)
-            loss_aux = AuxLoss(fake, wave)
+            loss_dsp = AuxLoss(dsp_out_recon.sum(dim=1), wave)
+            loss_aux = AuxLoss(recon, wave)
 
             if d_join:
                 loss_adv = 0
@@ -116,7 +120,8 @@ for epoch in range(args.epoch):
                 for logit in logits:
                     loss_adv += (logit ** 2).mean() / len(logits)
                 loss_feat = 0
-                for r, f in zip(feats_real, feats_fake):
+                _, feats_recon = discriminator(center(recon))
+                for r, f in zip(feats_real, feats_recon):
                     loss_feat += (r - f).abs().mean()
                 loss_g = loss_adv * args.weight_adv + loss_aux * args.weight_aux + loss_feat * args.weight_feat + loss_dsp * args.weight_dsp
             else:

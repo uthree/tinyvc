@@ -79,7 +79,7 @@ class DiscriminatorR(nn.Module):
         self.post = norm_f(nn.Conv2d(c, 1, 3, 1, 1))
 
     def forward(self, x):
-        x = x.mean(dim=1)
+        x = x.sum(dim=1)
         w = torch.hann_window(self.n_fft).to(x.device)
         x = torch.stft(x, self.n_fft, self.hop_size, window=w, return_complex=True).abs()
         x = x.unsqueeze(1)

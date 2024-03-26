@@ -56,7 +56,7 @@ class LogMelSpectrogramLoss(nn.Module):
     def forward(self, x, y):
         x = x.to(torch.float)
         y = y.to(torch.float)
-        
+
         x = safe_log(self.to_mel(x))
         y = safe_log(self.to_mel(y))
 
