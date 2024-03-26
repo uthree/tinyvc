@@ -115,12 +115,12 @@ for epoch in range(args.epoch):
             if d_join:
                 loss_adv = 0
                 fake = fake.clamp(-1.0, 1.0)
-                logits, feats_fake = discriminator(center(fake))
+                logits, _ = discriminator(center(fake))
                 _, feats_real = discriminator(center(wave))
+                _, feats_recon = discriminator(center(recon))
                 for logit in logits:
                     loss_adv += (logit ** 2).mean() / len(logits)
                 loss_feat = 0
-                _, feats_recon = discriminator(center(recon))
                 for r, f in zip(feats_real, feats_recon):
                     loss_feat += (r - f).abs().mean()
                 loss_g = loss_adv * args.weight_adv + loss_aux * args.weight_aux + loss_feat * args.weight_feat + loss_dsp * args.weight_dsp
