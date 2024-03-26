@@ -21,6 +21,7 @@ parser.add_argument('--num-speakers', default=8192, type=int)
 parser.add_argument('-m', '--max-files', default=-1, type=int)
 parser.add_argument('-d', '--device', default='cuda')
 parser.add_argument('--speaker-infomation', default='speaker_infomation.json')
+parser.add_argument('--f0-estimation', default='fcpe')
 
 args = parser.parse_args()
 
@@ -58,7 +59,7 @@ for path in tqdm(dataset_files):
             chunk = torch.cat([chunk, pad], dim=1)
 
         # f0
-        f0 = estimate_f0(chunk)
+        f0 = estimate_f0(chunk, algorithm=args.f0_estimation)
 
         # get spekaer id
         if parent_path not in parent_paths:
