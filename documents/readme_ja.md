@@ -108,3 +108,4 @@ python3 infer_streaming.py -i <入力デバイスID> -o <出力デバイスID> -
 - [FastSVC](https://arxiv.org/abs/2011.05731)
 - [kNN-VC](https://arxiv.org/abs/2305.18975)
 - [WavLM](https://arxiv.org/pdf/2110.13900.pdf) (Fig. 2)
+- [NeuCoSVC](https://arxiv.org/abs/2312.04919)

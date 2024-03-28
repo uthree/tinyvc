@@ -112,3 +112,4 @@ python3 infer_streaming.py -i <input device ID> -o <output device ID> -l <loopba
 - [FastSVC](https://arxiv.org/abs/2011.05731)
 - [kNN-VC](https://arxiv.org/abs/2305.18975)
 - [WavLM](https://arxiv.org/pdf/2110.13900.pdf) (Fig. 2)
+- [NeuCoSVC](https://arxiv.org/abs/2312.04919)
