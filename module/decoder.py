@@ -186,7 +186,7 @@ class SourceNet(nn.Module):
         amps = F.interpolate(amps, scale_factor=self.frame_size, mode='linear')
 
         # oscillate harmonics
-        harmonics = oscillate_harmonics(f0, self.frame_size, self.sample_rate, self.num_harmonics, device=device)
+        harmonics = oscillate_harmonics(f0, self.frame_size, self.sample_rate, self.num_harmonics)
 
         # amplitude modulation
         harmonics = harmonics * amps
