@@ -21,8 +21,7 @@ def oscillate_harmonics(f0,
                         frame_size=480,
                         sample_rate=24000,
                         num_harmonics=0,
-                        min_frequency=20.0,
-                        device=torch.device('cpu')):
+                        min_frequency=20.0):
     N = f0.shape[0]
     Nh = num_harmonics + 1
     Lf = f0.shape[2]
