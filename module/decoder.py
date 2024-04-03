@@ -60,10 +60,6 @@ def oscillate_harmonics(f0,
 def match_features(source, reference, k=4, alpha=0.0, metrics='cos'):
     input_data = source
 
-    # Ensure the first two dimensions are [1, 768]
-    source = source.unsqueeze(0) if source.dim() == 1 else source
-    reference = reference.unsqueeze(0) if reference.dim() == 1 else reference
-
     source = source.transpose(1, 2)
     reference = reference.transpose(1, 2)
     if metrics == 'IP':
@@ -73,14 +69,7 @@ def match_features(source, reference, k=4, alpha=0.0, metrics='cos'):
     elif metrics == 'cos':
         reference_norm = torch.norm(reference, dim=2, keepdim=True, p=2) + 1e-6
         source_norm = torch.norm(source, dim=2, keepdim=True, p=2) + 1e-6
-        # Ensure both source_norm and reference_norm have the same size
-        source_norm_expanded = source_norm.expand_as(source)
-        reference_norm_expanded = reference_norm.expand_as(reference)
-        source = source.reshape(1, -1, 768)
-        source_norm_expanded = source_norm_expanded.reshape(1, -1, 768)
-        reference = reference.reshape(1, -1, 768)
-        reference_norm_expanded = reference_norm_expanded.reshape(1, -1, 768)
-        sims = torch.bmm(source / source_norm_expanded, (reference / reference_norm_expanded).transpose(1, 2))
+        sims = torch.bmm(source / source_norm, (reference / reference_norm).transpose(1, 2))
     best = torch.topk(sims, k, dim=2)
 
     result = torch.stack([reference[n][best.indices[n]] for n in range(source.shape[0])], dim=0).mean(dim=2)

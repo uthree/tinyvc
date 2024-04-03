@@ -66,7 +66,7 @@ class MultiPeriodicDiscriminator(nn.Module):
 
 
 class DiscriminatorR(nn.Module):
-    def __init__(self, resolution=128, channels=16, num_layers=4):
+    def __init__(self, resolution=128, channels=32, num_layers=4, max_channels=256):
         super().__init__()
         norm_f = nn.utils.weight_norm
         self.convs = nn.ModuleList([norm_f(nn.Conv2d(1, channels, (7, 3), (2, 1), (3, 1)))])
@@ -74,8 +74,9 @@ class DiscriminatorR(nn.Module):
         self.n_fft = resolution * 4
         c = channels
         for _ in range(num_layers):
-            self.convs.append(norm_f(nn.Conv2d(c, c*2, (5, 3), (2, 1), (2, 1))))
-            c = c * 2
+            c_next = min(c*2, max_channels)
+            self.convs.append(norm_f(nn.Conv2d(c, c_next, (5, 3), (2, 1), (2, 1))))
+            c = c_next
         self.post = norm_f(nn.Conv2d(c, 1, 3, 1, 1))
 
     def forward(self, x):
@@ -94,11 +95,11 @@ class DiscriminatorR(nn.Module):
 
 
 class MultiResolutionDiscriminator(nn.Module):
-    def __init__(self, resolutions, channels, num_layers):
+    def __init__(self, resolutions, channels, num_layers, max_channels):
         super().__init__()
         self.sub_discs = nn.ModuleList([])
         for r in resolutions:
-            self.sub_discs.append(DiscriminatorR(r, channels, num_layers))
+            self.sub_discs.append(DiscriminatorR(r, channels, num_layers, max_channels))
 
     def forward(self, x):
         feats = []
@@ -113,16 +114,17 @@ class MultiResolutionDiscriminator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self,
                  resolutions=[128, 256, 512],
-                 periods=[1, 2, 3, 5, 7, 11],
+                 periods=[1, 2, 3, 5, 7, 11, 17, 23, 37],
                  mpd_num_layers=4,
                  mrd_num_layers=4,
                  mpd_channels=32,
-                 mrd_channels=16,
+                 mrd_channels=32,
                  mpd_max_channels=256,
+                 mrd_max_channels=256,
                  ):
         super().__init__()
         self.MPD = MultiPeriodicDiscriminator(periods, mpd_channels, mpd_max_channels, mpd_num_layers)
-        self.MRD = MultiResolutionDiscriminator(resolutions, mrd_channels, mrd_num_layers)
+        self.MRD = MultiResolutionDiscriminator(resolutions, mrd_channels, mrd_num_layers, mrd_max_channels)
 
     def forward(self, x):
         x = x.unsqueeze(1)
