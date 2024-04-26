@@ -49,13 +49,17 @@ def estimate_f0_harvest(wf, sample_rate=24000, segment_size=480, f0_min=20, f0_m
 
 global torchfcpe_model
 torchfcpe_model = None
-def estimate_f0_fcpe(wf, sample_rate=24000, segment_size=480, f0_min=20, f0_max=20000):
+def estimate_f0_fcpe(wf, sample_rate=48000, segment_size=960, f0_min=20, f0_max=20000):
+    input_device = wf.device
     global torchfcpe_model
-    device = wf.device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    wf = wf.to(device)
     if torchfcpe_model is None:
         torchfcpe_model = spawn_bundled_infer_model(device)
     f0 = torchfcpe_model.infer(wf.unsqueeze(2), sample_rate)
-    return f0.transpose(1, 2)
+    f0 = f0.transpose(1, 2)
+    f0 = f0.to(input_device)
+    return f0
 
 
 def estimate_f0(wf, sample_rate=24000, segment_size=480, algorithm='harvest'):
