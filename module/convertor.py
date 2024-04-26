@@ -84,7 +84,7 @@ class Convertor(nn.Module):
 
             # cross fade
             y_prev = torch.cat([output_buffer, torch.zeros(1, chunk_size, device=device)], dim=1)[:, chunk_size:]
-            window = torch.hann_window(y_prev.shape[1]).unsqueeze(0)
+            window = torch.hann_window(y_prev.shape[1], device=y_prev.device).unsqueeze(0)
 
             output_buffer = y_prev + y * window
 
