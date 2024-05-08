@@ -6,37 +6,43 @@ import torch.nn.functional as F
 
 
 # Oscillate harmonic signal
+# 基音と倍音を生成
 #
 # Inputs ---
 # f0: [BatchSize, 1, Frames]
-# frame_size: int
-# num_harmonics: int
-# min_frequency: float
-# noise_scale: float
 #
-# Output: [BatchSize, NumHarmonics, Length]
+# frame_size: int
+# sample_rate: float or int
+# min_frequency: float
+# num_harmonics: int
+#
+# Output: [BatchSize, NumHarmonics+1, Length]
 #
 # length = Frames * frame_size
-def oscillate_harmonics(f0,
-                        frame_size=480,
-                        sample_rate=24000,
-                        num_harmonics=0,
-                        min_frequency=20.0):
+@torch.cuda.amp.autocast(enabled=False)
+def oscillate_harmonics(
+        f0,
+        frame_size=480,
+        sample_rate=24000,
+        num_harmonics=0,
+        min_frequency=20.0,
+    ):
     N = f0.shape[0]
-    Nh = num_harmonics + 1
+    C = num_harmonics + 1
     Lf = f0.shape[2]
     Lw = Lf * frame_size
 
     device = f0.device
 
     # generate frequency of harmonics
-    mul = (torch.arange(Nh, device=device) + 1).unsqueeze(0).unsqueeze(2).expand(N, Nh, Lw)
+    mul = (torch.arange(C, device=device) + 1).unsqueeze(0).unsqueeze(2)
 
     # change length to wave's
     fs = F.interpolate(f0, Lw, mode='linear') * mul
 
     # unvoiced / voiced mask
-    uv = F.interpolate((fs >= min_frequency).to(torch.float), Lw, mode='linear')
+    uv = (f0 > min_frequency).to(torch.float)
+    uv = F.interpolate(uv, Lw, mode='linear')
 
     # generate harmonics
     I = torch.cumsum(fs / sample_rate, dim=2) # numerical integration
@@ -45,6 +51,40 @@ def oscillate_harmonics(f0,
     harmonics = torch.sin(theta) * uv
 
     return harmonics.to(device)
+
+
+# Oscillate noise via gaussian noise and equalizer
+#
+# fft_bin = n_fft // 2 + 1
+# kernel: [BatchSize, fft_bin, Length]
+#
+# Output: [BatchSize, 1, Length * frame_size]
+@torch.cuda.amp.autocast(enabled=False)
+def oscillate_noise(
+        kernel,
+        frame_size=480,
+        n_fft=1920
+    ):
+    device = kernel.device
+    N = kernel.shape[0]
+    Lf = kernel.shape[2] # frame length
+    Lw = Lf * frame_size # waveform length
+    dtype = kernel.dtype
+
+    gaussian_noise = torch.randn(N, Lw, device=device, dtype=torch.float)
+    kernel = kernel.to(torch.float) # to fp32
+
+    # calculate convolution in fourier-domain
+    # Since the input is an aperiodic signal such as Gaussian noise,
+    # there is no need to consider the phase on the kernel side.
+    w = torch.hann_window(n_fft, dtype=torch.float, device=device)
+    noise_stft = torch.stft(gaussian_noise, n_fft, frame_size, window=w, return_complex=True)[:, :, 1:]
+    y_stft = noise_stft * kernel # In fourier domain, Multiplication means convolution.
+    y_stft = F.pad(y_stft, [1, 0]) # pad
+    y = torch.istft(y_stft, n_fft, frame_size, window=w)
+    y = y.unsqueeze(1)
+    y = y.to(dtype)
+    return y
 
 
 # Convert style based kNN.
@@ -172,6 +212,7 @@ class SourceNet(nn.Module):
         x = self.mid_layers(x)
         amps = F.elu(self.to_amps(x)) + 1
         kernel = F.elu(self.to_kernel(x)) + 1
+        amps = F.interpolate(amps, scale_factor=self.frame_size, mode='linear')
         return amps, kernel
 
     def synthesize(self, content, energy, f0):
@@ -183,30 +224,12 @@ class SourceNet(nn.Module):
         # estimate DSP parameters
         amps, kernel = self.forward(content, energy, f0)
 
-        # ---  sinusoid additive synthesizer
-        # interpolate amplitude signals
-        amps = F.interpolate(amps, scale_factor=self.frame_size, mode='linear')
-
         # oscillate harmonics
         harmonics = oscillate_harmonics(f0, self.frame_size, self.sample_rate, self.num_harmonics)
-
-        # amplitude modulation
         harmonics = harmonics * amps
 
-        # --- noise synthesizer
-        # oscillate gaussian noise
-        gaussian_noise = torch.randn(N, waveform_length, device=device).to(torch.float) # to fp32
-        kernel = kernel.to(torch.float) # to fp32
-
-        # calculate convolution in fourier-domain
-        # Since the input is an aperiodic signal such as Gaussian noise,
-        # there is no need to consider the phase on the kernel side.
-        w = torch.hann_window(self.n_fft).to(device) # get window
-        noise_stft = torch.stft(gaussian_noise, self.n_fft, hop_length=self.frame_size, window=w, return_complex=True)[:, :, 1:]
-        n = noise_stft * kernel # In fourier domain, Multiplication means convolution.
-        n = F.pad(n, [1, 0]) # pad
-        noise = torch.istft(n, self.n_fft, self.frame_size, window=w).to(dtype)
-        noise = noise.unsqueeze(1)
+        # oscillate noise
+        noise = oscillate_noise(kernel, self.frame_size, self.n_fft)
 
         # concatenate and return output
         output = torch.cat([harmonics, noise], dim=1)
@@ -326,5 +349,5 @@ class Decoder(nn.Module):
 
     def infer(self, content, energy, f0):
         src = self.source_net.synthesize(content, energy, f0)
-        out = self.filter_net.synthesize(content, energy, source)
+        out = self.filter_net.synthesize(content, energy, src)
         return out

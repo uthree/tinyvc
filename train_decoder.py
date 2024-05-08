@@ -29,12 +29,12 @@ parser.add_argument('-d', '--device', default='cuda')
 parser.add_argument('-e', '--epoch', default=100000, type=int)
 parser.add_argument('-b', '--batch-size', default=8, type=int)
 parser.add_argument('--save-interval', default=100, type=int)
-parser.add_argument('-aux-type', choices=['ms-stft', 'mel'], default='ms-stft')
+parser.add_argument('-spec-type', choices=['ms-stft', 'mel'], default='ms-stft')
 parser.add_argument('-fp16', default=False, type=bool)
 
 parser.add_argument('--weight-adv', default=1.0, type=float)
 parser.add_argument('--weight-dsp', default=1.0, type=float)
-parser.add_argument('--weight-aux', default=20.0, type=float)
+parser.add_argument('--weight-spec', default=20.0, type=float)
 parser.add_argument('--weight-feat', default=2.0, type=float)
 
 args = parser.parse_args()
@@ -70,10 +70,10 @@ encoder.load_state_dict(torch.load(args.encoder_path, map_location=device))
 ds = Dataset(args.dataset_cache)
 dl = torch.utils.data.DataLoader(ds, batch_size=args.batch_size, shuffle=True)
 
-if args.aux_type == 'ms-stft':
-    AuxLoss = MultiScaleSTFTLoss().to(device)
+if args.spec_type == 'ms-stft':
+    SpecLoss = MultiScaleSTFTLoss().to(device)
 else:
-    AuxLoss = LogMelSpectrogramLoss().to(device)
+    SpecLoss = LogMelSpectrogramLoss().to(device)
 
 OptG = optim.AdamW(decoder.parameters(), lr=args.learning_rate, betas=(0.8, 0.99))
 OptD = optim.AdamW(discriminator.parameters(), lr=args.learning_rate, betas=(0.8, 0.99))
@@ -97,35 +97,29 @@ for epoch in range(args.epoch):
         OptG.zero_grad()
         with torch.cuda.amp.autocast(enabled=args.fp16):
             z, f0 = encoder.infer(wave)
-            z_recon = match_features(z, z).detach()
-            z_fake = match_features(z, torch.roll(z, 1, dims=0))
-            f0_fake = f0 * torch.rand(N, 1, 1, device=device) * 2
+            z_fake = match_features(z, z).detach()
             energy = estimate_energy(wave, decoder.frame_size)
-            dsp_out_recon = decoder.source_net.synthesize(z_recon, energy, f0)
-            recon = decoder.filter_net.synthesize(z_recon, energy, dsp_out_recon)
-            dsp_out_fake = decoder.source_net.synthesize(z_fake, energy, f0_fake)
-            fake = decoder.filter_net.synthesize(z_fake, energy, dsp_out_fake)
+            dsp_out = decoder.source_net.synthesize(z_fake, energy, f0)
+            fake = decoder.filter_net.synthesize(z_fake, energy, dsp_out)
             
-            recon = recon.squeeze(1)
             fake = fake.squeeze(1)
 
-            loss_dsp = AuxLoss(dsp_out_recon.sum(dim=1), wave)
-            loss_aux = AuxLoss(recon, wave)
+            loss_dsp = SpecLoss(dsp_out.sum(dim=1), wave)
+            loss_spec = SpecLoss(fake, wave)
 
             if d_join:
                 loss_adv = 0
                 fake = fake.clamp(-1.0, 1.0)
-                logits, _ = discriminator(center(fake))
                 _, feats_real = discriminator(center(wave))
-                _, feats_recon = discriminator(center(recon))
+                logits, feats_fake = discriminator(center(fake))
                 for logit in logits:
                     loss_adv += (logit ** 2).mean() / len(logits)
                 loss_feat = 0
-                for r, f in zip(feats_real, feats_recon):
+                for r, f in zip(feats_real, feats_fake):
                     loss_feat += (r - f).abs().mean()
-                loss_g = loss_adv * args.weight_adv + loss_aux * args.weight_aux + loss_feat * args.weight_feat + loss_dsp * args.weight_dsp
+                loss_g = loss_adv * args.weight_adv + loss_spec * args.weight_spec + loss_feat * args.weight_feat + loss_dsp * args.weight_dsp
             else:
-                loss_g = loss_aux * args.weight_aux + loss_dsp * args.weight_dsp
+                loss_g = loss_spec * args.weight_spec + loss_dsp * args.weight_dsp
 
         scaler.scale(loss_g).backward()
         nn.utils.clip_grad_norm_(decoder.parameters(), 1.0)
@@ -148,9 +142,9 @@ for epoch in range(args.epoch):
             scaler.step(OptD)
         
         if d_join:
-            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Dis.: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Aux.: {loss_aux.item():.4f}, Feat. {loss_feat.item():.4f}, DSP: {loss_dsp.item():.4f}")
+            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Dis.: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Spec.: {loss_spec.item():.4f}, Feat. {loss_feat.item():.4f}, DSP: {loss_dsp.item():.4f}")
         else:
-            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Aux.: {loss_aux.item():.4f}, DSP: {loss_dsp.item():.4f}")
+            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Spec.: {loss_spec.item():.4f}, DSP: {loss_dsp.item():.4f}")
 
         scaler.update()
         step_count += 1
