@@ -93,12 +93,13 @@ class Convertor(nn.Module):
             wf = self.convert_chunk(wf, tgt, pitch_shift, device, f0_estimation)
             wf = wf.cpu()
         else:
+            wf = wf.cpu()
             chunks = torch.split(wf, chunk_size, dim=1)
             results = []
             buffer = self.init_buffer(buffer_size, device)
             for chunk in tqdm(chunks):
                 if chunk.shape[1] < chunk_size:
-                    chunk = torch.cat([chunk, torch.zeros(1, chunk_size - chunk.shape[1], device=device)], dim=1)
+                    chunk = torch.cat([chunk, torch.zeros(1, chunk_size - chunk.shape[1])], dim=1)
                 chunk = chunk.to(device)
                 out, buffer = self.streaming_convert(chunk, buffer, tgt, pitch_shift, device, f0_estimation)
                 out = out.cpu()

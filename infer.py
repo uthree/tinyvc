@@ -25,7 +25,7 @@ parser.add_argument('-idx', '--index', default='NONE')
 parser.add_argument('-t', '--target', default='target.wav')
 parser.add_argument('-d', '--device', default='cpu')
 parser.add_argument('-p', '--pitch-shift', default=0.0, type=float)
-parser.add_argument('-c', '--chunk-size', default=960, type=int)
+parser.add_argument('-c', '--chunk-size', default=1920, type=int)
 parser.add_argument('-b', '--buffer-size', default=4, type=int)
 parser.add_argument('-nc', '--no-chunking', default=False, type=bool)
 
