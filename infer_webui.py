@@ -33,19 +33,21 @@ if __name__ == "__main__":
     decoder.load_state_dict(torch.load(args.decoder_path, map_location=device))
     convertor = Convertor(encoder, decoder).to(device)
 
-    def convert(input_audio, target_audio, pitch_shift):
+    def audio_to_tensor(input_audio):
         input_sr, input_wf = input_audio
         input_wf = torch.from_numpy(input_wf).unsqueeze(0).to(device).to(torch.float)
+        if input_wf.ndim == 3:
+            input_wf = input_wf.sum(dim=2)
         input_wf = input_wf / input_wf.abs().max()
         input_wf = resample(input_wf, input_sr, 24000).to(device)
+        return input_wf
 
-        target_sr, target_wf = target_audio
-        target_wf = torch.from_numpy(target_wf).unsqueeze(0).to(device).to(torch.float)
-        target_wf = target_wf / target_wf.abs().max()
-        target_wf = resample(target_wf, target_sr, 24000).to(device)
+    def convert(input_audio, target_audio, pitch_shift):
+        input_wf = audio_to_tensor(input_audio)
+        target_wf = audio_to_tensor(target_audio)
 
         tgt = convertor.encode_target(target_wf)
-        output_wf = convertor.convert_without_chunking(input_wf, tgt, pitch_shift, device=device)
+        output_wf = convertor.convert(input_wf, tgt, pitch_shift, device=device)
 
         output_wf = output_wf.clamp(-1.0, 1.0)
         output_wf = output_wf * 32768.0

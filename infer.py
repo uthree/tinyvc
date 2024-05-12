@@ -25,8 +25,8 @@ parser.add_argument('-idx', '--index', default='NONE')
 parser.add_argument('-t', '--target', default='target.wav')
 parser.add_argument('-d', '--device', default='cpu')
 parser.add_argument('-p', '--pitch-shift', default=0.0, type=float)
-parser.add_argument('-c', '--chunk_size', default=960, type=int)
-parser.add_argument('-b', '--buffer_size', default=4, type=int)
+parser.add_argument('-c', '--chunk-size', default=960, type=int)
+parser.add_argument('-b', '--buffer-size', default=4, type=int)
 parser.add_argument('-nc', '--no-chunking', default=False, type=bool)
 
 args = parser.parse_args()
@@ -64,22 +64,7 @@ for i, path in enumerate(paths):
     wf = resample(wf, sr, 24000)
     wf = wf.mean(dim=0, keepdim=True)
     
-    if args.no_chunking:
-        wf = wf.to(device)
-        wf = convertor.convert_without_chunking(wf, tgt, args.pitch_shift, device, args.f0_estimation)
-        wf = wf.cpu()
-    else:
-        chunks = torch.split(wf, chunk_size, dim=1)
-        results = []
-        buffer = convertor.init_buffer(buffer_size, device)
-        for chunk in tqdm(chunks):
-            if chunk.shape[1] < chunk_size:
-                chunk = torch.cat([chunk, torch.zeros(1, chunk_size - chunk.shape[1])], dim=1)
-            chunk = chunk.to(device)
-            out, buffer = convertor.convert(chunk, buffer, tgt, args.pitch_shift, device, args.f0_estimation)
-            out = out.cpu()
-            results.append(out)
-        wf = torch.cat(results, dim=1)
+    wf = convertor.convert(wf, tgt, args.pitch_shiftm, args.device, args.f0_estimation, args.chunk_size, args.buffer_size)
 
     file_name = f"{os.path.splitext(os.path.basename(path))[0]}"
     torchaudio.save(os.path.join(args.outputs, f"{file_name}.wav"), src=wf, sample_rate=24000)

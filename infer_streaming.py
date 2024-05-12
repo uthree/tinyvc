@@ -87,7 +87,7 @@ while True:
     chunk = chunk.unsqueeze(0) / 32768
     
     chunk = gain(chunk, args.input_gain)
-    chunk, buffer = convertor.convert(chunk, buffer, tgt, pitch_shift, device)
+    chunk, buffer = convertor.streaming_convert(chunk, buffer, tgt, pitch_shift, device)
     chunk = gain(chunk, args.output_gain)
 
     chunk = chunk.cpu().numpy() * 32768
