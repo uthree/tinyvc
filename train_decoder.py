@@ -35,8 +35,8 @@ parser.add_argument('-fp16', default=False, type=bool)
 
 parser.add_argument('--weight-adv', default=1.0, type=float)
 parser.add_argument('--weight-dsp', default=1.0, type=float)
-parser.add_argument('--weight-spec', default=20.0, type=float)
-parser.add_argument('--weight-feat', default=2.0, type=float)
+parser.add_argument('--weight-spec', default=45.0, type=float)
+parser.add_argument('--weight-feat', default=1.0, type=float)
 
 args = parser.parse_args()
 
@@ -119,15 +119,18 @@ for epoch in range(args.epoch):
                     loss_adv += (logit ** 2).mean() / len(logits)
                 loss_feat = 0
                 for r, f in zip(feats_real, feats_fake):
-                    loss_feat += (r - f).abs().mean()
+                    loss_feat += (r - f).abs().mean() / len(feats_real)
                 loss_g = loss_adv * args.weight_adv + loss_spec * args.weight_spec + loss_feat * args.weight_feat + loss_dsp * args.weight_dsp
-                writer.add_scalar("loss/Feature Matching", loss_feat.item(), step_count)
-                writer.add_scalar("loss/Generator Adversarial", loss_adv.item(), step_count)
+
+                if step_count % 50 == 0:
+                    writer.add_scalar("loss/Feature Matching", loss_feat.item(), step_count)
+                    writer.add_scalar("loss/Generator Adversarial", loss_adv.item(), step_count)
             else:
                 loss_g = loss_spec * args.weight_spec + loss_dsp * args.weight_dsp
             
-            writer.add_scalar("loss/Spectrogram", loss_spec.item(), step_count)
-            writer.add_scalar("loss/DSP", loss_dsp.item(), step_count)
+            if step_count % 50 == 0:
+                writer.add_scalar("loss/Spectrogram", loss_spec.item(), step_count)
+                writer.add_scalar("loss/DSP", loss_dsp.item(), step_count)
 
         scaler.scale(loss_g).backward()
         nn.utils.clip_grad_norm_(decoder.parameters(), 1.0)

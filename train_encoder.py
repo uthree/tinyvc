@@ -98,8 +98,9 @@ for epoch in range(args.epoch):
             loss = loss_f0 + loss_distill * 45
 
             # logging
-            writer.add_scalar("loss/Pitch Estimation", loss_f0.item(), step_count)
-            writer.add_scalar("loss/Distillation", loss_distill.item(), step_count)
+            if step_count % 50 == 0:
+                writer.add_scalar("loss/Pitch Estimation", loss_f0.item(), step_count)
+                writer.add_scalar("loss/Distillation", loss_distill.item(), step_count)
 
         scaler.scale(loss).backward()
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
