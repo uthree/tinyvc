@@ -47,9 +47,10 @@ def estimate_f0_harvest(wf, sample_rate=24000, segment_size=480, f0_min=20, f0_m
         pitchs = torch.stack(pitchs, dim=0)
         return pitchs
 
+
 global torchfcpe_model
 torchfcpe_model = None
-def estimate_f0_fcpe(wf, sample_rate=48000, segment_size=960, f0_min=20, f0_max=20000):
+def estimate_f0_fcpe(wf, sample_rate=24000, segment_size=480, f0_min=20, f0_max=20000):
     input_device = wf.device
     global torchfcpe_model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

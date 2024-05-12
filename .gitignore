@@ -170,3 +170,5 @@ cython_debug/
 *.onnx
 
 backups/*
+logs
+dataset_cache

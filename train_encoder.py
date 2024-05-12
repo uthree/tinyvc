@@ -14,13 +14,15 @@ from module.dataset import Dataset
 from module.encoder import Encoder
 from module.common import spectrogram
 from module.noise_generator import NoiseGenerator
-from transformers import  HubertModel
+from transformers import HubertModel
+
+from torch.utils.tensorboard import SummaryWriter
 
 parser = argparse.ArgumentParser(description="distillation of HuBERT-Base 4th layer / Pitch Estimation")
 
 parser.add_argument('--dataset-cache', default='dataset_cache')
 parser.add_argument('--noises', default='NONE')
-parser.add_argument('--hubert', default='rinna/japanese-hubert-base')
+parser.add_argument('--hubert', default='microsoft/wavlm-base-plus')
 parser.add_argument('-path', '--path', default='models/encoder.pt')
 parser.add_argument('-lr', '--learning-rate', type=float, default=1e-4)
 parser.add_argument('-d', '--device', default='cuda')
@@ -54,8 +56,10 @@ weight = torch.ones(model.num_f0_classes)
 weight[0] = 1e-3
 cross_entropy_f0 = nn.CrossEntropyLoss(weight).to(device)
 
+writer = SummaryWriter(log_dir="./logs")
+
 # for noise reduction
-if args.noises != None:
+if args.noises != 'NONE':
     add_noise = True
     noise_generator = NoiseGenerator(args.noises)
 else:
@@ -93,7 +97,12 @@ for epoch in range(args.epoch):
             loss_f0 = cross_entropy_f0(f0_out, f0_label)
             loss = loss_f0 + loss_distill * 45
 
+            # logging
+            writer.add_scalar("loss/Pitch Estimation", loss_f0.item(), step_count)
+            writer.add_scalar("loss/Distillation", loss_distill.item(), step_count)
+
         scaler.scale(loss).backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         scaler.step(Opt)
 
         scaler.update()
@@ -109,3 +118,4 @@ for epoch in range(args.epoch):
 
 print("Training Complete!")
 save_models(model)
+writer.close()

@@ -63,7 +63,7 @@ class Encoder(nn.Module):
                  hubert_channels=768,
                  num_f0_classes=512,
                  f0_min=20,
-                 f0_estimate_topk=2):
+                 f0_estimate_topk=4):
         super().__init__()
         self.n_fft = n_fft
         self.hop_size = hop_size

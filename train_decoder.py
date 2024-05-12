@@ -15,6 +15,7 @@ from module.encoder import Encoder
 from module.decoder import Decoder, match_features
 from module.discriminator import Discriminator
 
+from torch.utils.tensorboard import SummaryWriter
 
 parser = argparse.ArgumentParser(description="train voice conversion model")
 
@@ -28,7 +29,7 @@ parser.add_argument('-lr', '--learning-rate', type=float, default=1e-4)
 parser.add_argument('-d', '--device', default='cuda')
 parser.add_argument('-e', '--epoch', default=100000, type=int)
 parser.add_argument('-b', '--batch-size', default=8, type=int)
-parser.add_argument('--save-interval', default=100, type=int)
+parser.add_argument('--save-interval', default=500, type=int)
 parser.add_argument('-spec-type', choices=['ms-stft', 'mel'], default='ms-stft')
 parser.add_argument('-fp16', default=False, type=bool)
 
@@ -79,6 +80,8 @@ OptG = optim.AdamW(decoder.parameters(), lr=args.learning_rate, betas=(0.8, 0.99
 OptD = optim.AdamW(discriminator.parameters(), lr=args.learning_rate, betas=(0.8, 0.99))
 scaler = torch.cuda.amp.GradScaler(enabled=args.fp16)
 
+writer = SummaryWriter(log_dir="./logs")
+
 # Training
 step_count = 0
 
@@ -118,8 +121,13 @@ for epoch in range(args.epoch):
                 for r, f in zip(feats_real, feats_fake):
                     loss_feat += (r - f).abs().mean()
                 loss_g = loss_adv * args.weight_adv + loss_spec * args.weight_spec + loss_feat * args.weight_feat + loss_dsp * args.weight_dsp
+                writer.add_scalar("loss/Feature Matching", loss_feat.item(), step_count)
+                writer.add_scalar("loss/Generator Adversarial", loss_adv.item(), step_count)
             else:
                 loss_g = loss_spec * args.weight_spec + loss_dsp * args.weight_dsp
+            
+            writer.add_scalar("loss/Spectrogram", loss_spec.item(), step_count)
+            writer.add_scalar("loss/DSP", loss_dsp.item(), step_count)
 
         scaler.scale(loss_g).backward()
         nn.utils.clip_grad_norm_(decoder.parameters(), 1.0)
@@ -140,6 +148,7 @@ for epoch in range(args.epoch):
             scaler.scale(loss_d).backward()
             nn.utils.clip_grad_norm_(discriminator.parameters(), 1.0)
             scaler.step(OptD)
+            writer.add_scalar("loss/Discriminator Adversarial", loss_d.item(), step_count)
         
         if d_join:
             tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Dis.: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Spec.: {loss_spec.item():.4f}, Feat. {loss_feat.item():.4f}, DSP: {loss_dsp.item():.4f}")
@@ -157,3 +166,4 @@ for epoch in range(args.epoch):
 
 print("Training Complete!")
 save_models(decoder, discriminator)
+writer.close()

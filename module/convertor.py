@@ -26,7 +26,6 @@ class Convertor(nn.Module):
 
     def convert_without_chunking(self, wf, tgt, pitch_shift, device=torch.device('cpu'), f0_estimation='default'):
         frame_size = self.decoder.frame_size
-        sample_rate = self.decoder.sample_rate
 
         x = wf.to(device)
 
@@ -38,7 +37,7 @@ class Convertor(nn.Module):
                 f0 = estimate_f0(x, algorithm=f0_estimation)
 
             # pitch shift
-            scale = 12 * torch.log2(f0 / 440)
+            scale = 12 * torch.log2(f0 / 440 + 1e-6)
             scale += pitch_shift
             f0 = 440 * (2 ** (scale / 12))
 
@@ -71,7 +70,7 @@ class Convertor(nn.Module):
                 f0 = estimate_f0(x, algorithm=f0_estimation)
 
             # pitch shift
-            scale = 12 * torch.log2(f0 / 440)
+            scale = 12 * torch.log2(f0 / 440 + 1e-6)
             scale += pitch_shift
             f0 = 440 * (2 ** (scale / 12))
 

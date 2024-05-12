@@ -7,3 +7,5 @@ transformers
 pyaudio
 pyworld
 torchfcpe
+tensorboard
+gradio

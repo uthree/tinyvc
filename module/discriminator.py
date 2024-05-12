@@ -26,6 +26,7 @@ class DiscriminatorP(nn.Module):
         self.post = norm_f(nn.Conv2d(c, 1, (3, 1), 1, (1, 0), padding_mode='replicate'))
 
     def forward(self, x):
+        x = x.unsqueeze(1) # [B, T] -> [B, 1, T]
         fmap = []
 
         # 1d to 2d
@@ -79,11 +80,15 @@ class DiscriminatorR(nn.Module):
             c = c_next
         self.post = norm_f(nn.Conv2d(c, 1, 3, 1, 1))
 
-    def forward(self, x):
-        x = x.sum(dim=1)
+    @torch.cuda.amp.autocast(enabled=False)
+    def spectrogram(self, x):
         w = torch.hann_window(self.n_fft).to(x.device)
         x = torch.stft(x, self.n_fft, self.hop_size, window=w, return_complex=True).abs()
         x = x.unsqueeze(1)
+        return x
+
+    def forward(self, x):
+        x = self.spectrogram(x)
         feats = []
         for l in self.convs:
             x = l(x)
@@ -127,7 +132,6 @@ class Discriminator(nn.Module):
         self.MRD = MultiResolutionDiscriminator(resolutions, mrd_channels, mrd_num_layers, mrd_max_channels)
 
     def forward(self, x):
-        x = x.unsqueeze(1)
         mpd_logits, mpd_feats = self.MPD(x)
         mrd_logits, mrd_feats = self.MRD(x)
         return mpd_logits + mrd_logits, mpd_feats + mrd_feats
