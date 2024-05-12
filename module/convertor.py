@@ -86,10 +86,11 @@ class Convertor(nn.Module):
                 device=torch.device('cpu'),
                 f0_estimation='default',
                 chunk_size=7680,
-                buffer_size=15360):
-        if wf.shape[1] < chunk_size:
+                buffer_size=15360,
+                no_chunking=False):
+        if wf.shape[1] < chunk_size or no_chunking:
             wf = wf.to(device)
-            wf = self.streaming_convert(wf, tgt, pitch_shift, device, f0_estimation)
+            wf = self.convert_chunk(wf, tgt, pitch_shift, device, f0_estimation)
             wf = wf.cpu()
         else:
             chunks = torch.split(wf, chunk_size, dim=1)

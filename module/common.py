@@ -16,8 +16,8 @@ def spectrogram(wave, n_fft, hop_size):
 
 
 # estimate energy
-# wave: [BatchSize, 1, Length]
-# Output: [BatchSize, 1, Frames]
+# wave: [BatchSize, Length]
+# Output: [BatchSize, Frames]
 def estimate_energy(wave,
            frame_size=480):
     return F.max_pool1d((wave.abs()).unsqueeze(1), frame_size)

@@ -64,7 +64,7 @@ for i, path in enumerate(paths):
     wf = resample(wf, sr, 24000)
     wf = wf.mean(dim=0, keepdim=True)
     
-    wf = convertor.convert(wf, tgt, args.pitch_shiftm, args.device, args.f0_estimation, args.chunk_size, args.buffer_size)
+    wf = convertor.convert(wf, tgt, args.pitch_shift, args.device, args.f0_estimation, args.chunk_size, args.buffer_size * args.chunk_size, args.no_chunking)
 
     file_name = f"{os.path.splitext(os.path.basename(path))[0]}"
     torchaudio.save(os.path.join(args.outputs, f"{file_name}.wav"), src=wf, sample_rate=24000)
