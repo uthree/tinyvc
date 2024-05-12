@@ -22,11 +22,18 @@ if __name__ == "__main__":
     parser.add_argument('-encp', '--encoder-path', default='./models/encoder.pt')
     parser.add_argument('-decp', '--decoder-path', default='./models/decoder.pt')
     parser.add_argument('-f0-est', '--f0-estimation', default='default')
-    parser.add_argument('-d', '--device', default='cpu')
+    parser.add_argument('-d', '--device', default='auto')
 
     args = parser.parse_args()
 
-    device = torch.device(args.device)
+    if args.device == 'auto':
+        device = torch.device('cpu')
+        if torch.cuda.is_available():
+            device = torch.device('cuda')
+        if torch.backends.mps.is_available():
+            device = torch.device('mps')
+    else:
+        device = torch.device(args.device)
     encoder = Encoder().to(device).eval()
     encoder.load_state_dict(torch.load(args.encoder_path, map_location=device))
     decoder = Decoder().to(device).eval()
@@ -35,7 +42,7 @@ if __name__ == "__main__":
 
     def audio_to_tensor(input_audio):
         input_sr, input_wf = input_audio
-        input_wf = torch.from_numpy(input_wf).unsqueeze(0).to(device).to(torch.float)
+        input_wf = torch.from_numpy(input_wf).unsqueeze(0).to(torch.float)
         if input_wf.ndim == 3:
             input_wf = input_wf.sum(dim=2)
         input_wf = input_wf / input_wf.abs().max()

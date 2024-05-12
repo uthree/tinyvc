@@ -87,7 +87,6 @@ class Convertor(nn.Module):
                 f0_estimation='default',
                 chunk_size=7680,
                 buffer_size=15360):
-        print(wf.shape)
         if wf.shape[1] < chunk_size:
             wf = wf.to(device)
             wf = self.streaming_convert(wf, tgt, pitch_shift, device, f0_estimation)
@@ -98,7 +97,7 @@ class Convertor(nn.Module):
             buffer = self.init_buffer(buffer_size, device)
             for chunk in tqdm(chunks):
                 if chunk.shape[1] < chunk_size:
-                    chunk = torch.cat([chunk, torch.zeros(1, chunk_size - chunk.shape[1])], dim=1)
+                    chunk = torch.cat([chunk, torch.zeros(1, chunk_size - chunk.shape[1], device=device)], dim=1)
                 chunk = chunk.to(device)
                 out, buffer = self.streaming_convert(chunk, buffer, tgt, pitch_shift, device, f0_estimation)
                 out = out.cpu()
