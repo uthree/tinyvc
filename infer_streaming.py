@@ -76,7 +76,7 @@ else:
 pitch_shift = args.pitch_shift
 
 # initialize buffer
-buffer = convertor.init_buffer(BUFFER_SIZE, device)
+buffer = convertor.init_buffer(BUFFER_SIZE, device=device)
 
 # inference loop
 print("Converting voice, Ctrl+C to stop conversion")

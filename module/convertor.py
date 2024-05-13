@@ -21,9 +21,10 @@ class Convertor(nn.Module):
         z, f0 = self.encoder.infer(waveform)
         return z
 
-    def init_buffer(self, buffer_size, device=torch.device('cpu')):
-        input_buffer = torch.zeros(1, buffer_size, device=device)
+    def init_buffer(self, buffer_size, extra_size=0, device=torch.device('cpu')):
+        input_buffer = torch.zeros(1, buffer_size + extra_size, device=device)
         output_buffer = torch.zeros(1, buffer_size, device=device)
+
         return (input_buffer, output_buffer)
 
     def convert_chunk(self, wf, tgt, pitch_shift, device=torch.device('cpu'), f0_estimation='default'):
@@ -47,34 +48,33 @@ class Convertor(nn.Module):
             z = match_features(z, tgt)
 
             # synthesize new wave
-            y_dsp = self.decoder.source_net.synthesize(z, energy, f0)
-            y = self.decoder.filter_net.synthesize(z, energy, y_dsp).squeeze(1)
+            y = self.decoder.infer(z, energy, f0).squeeze(1)
 
             return y
 
+    @torch.inference_mode()
     def streaming_convert(self, chunk, buffer, tgt, pitch_shift=0, device=torch.device('cpu'), f0_estimation='default'):
-        frame_size = self.decoder.frame_size
-        sample_rate = self.decoder.sample_rate
         chunk_size = chunk.shape[1]
         device = chunk.device
 
-        input_buffer, output_buffer = buffer
-        buffer_size = input_buffer.shape[1]
+        input_buffer, output_buffer= buffer
+        input_buffer_size = input_buffer.shape[1]
+        output_buffer_size = output_buffer.shape[1]
 
-        with torch.inference_mode():
-            input_buffer = torch.cat([input_buffer, chunk], dim=1)[:, -buffer_size:]
-            x = input_buffer
+        input_buffer = torch.cat([input_buffer, chunk], dim=1)[:, -input_buffer_size:]
+        x = input_buffer
 
-            y = self.convert_chunk(x, tgt, pitch_shift, device, f0_estimation)
+        y = self.convert_chunk(x, tgt, pitch_shift, device, f0_estimation)
+        y = y[:, -output_buffer_size:]
 
-            # cross fade
-            y_prev = torch.cat([output_buffer, torch.zeros(1, chunk_size, device=device)], dim=1)[:, chunk_size:]
-            window = torch.hann_window(y_prev.shape[1], device=y_prev.device).unsqueeze(0)
+        # cross fade
+        y_prev = torch.cat([output_buffer, torch.zeros(1, chunk_size, device=device)], dim=1)[:, chunk_size:]
+        window = torch.hann_window(y.shape[1], device=y.device).unsqueeze(0)
 
-            output_buffer = y_prev + y * window
+        output_buffer = y_prev + y * window
 
-            # cut left
-            chunk = output_buffer[:, :chunk_size]
+        # cut left
+        chunk = output_buffer[:, :chunk_size]
 
         buffer = (input_buffer, output_buffer)
         return chunk, buffer
@@ -96,7 +96,7 @@ class Convertor(nn.Module):
             wf = wf.cpu()
             chunks = torch.split(wf, chunk_size, dim=1)
             results = []
-            buffer = self.init_buffer(buffer_size, device)
+            buffer = self.init_buffer(buffer_size, device=device)
             for chunk in tqdm(chunks):
                 if chunk.shape[1] < chunk_size:
                     chunk = torch.cat([chunk, torch.zeros(1, chunk_size - chunk.shape[1])], dim=1)
