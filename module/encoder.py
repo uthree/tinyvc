@@ -83,8 +83,7 @@ class Encoder(nn.Module):
         f0_logits = self.to_f0(x)
         return content, f0_logits
 
-    def infer(self, wave):
-        spec = spectrogram(wave, self.n_fft, self.hop_size)
+    def infer(self, spec):
         content, f0_logits = self.forward(spec)
         probs, indices = torch.topk(f0_logits, self.f0_estimate_topk, dim=1)
         probs = F.softmax(probs, dim=1)

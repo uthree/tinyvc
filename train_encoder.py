@@ -14,7 +14,7 @@ from module.dataset import Dataset
 from module.encoder import Encoder
 from module.common import spectrogram
 from module.noise_generator import NoiseGenerator
-from transformers import HubertModel
+from transformers import WavLMModel
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description="distillation of HuBERT-Base 4th la
 
 parser.add_argument('--dataset-cache', default='dataset_cache')
 parser.add_argument('--noises', default='NONE')
-parser.add_argument('--hubert', default='microsoft/wavlm-base-plus')
+parser.add_argument('--wavlm', default='microsoft/wavlm-base-plus')
 parser.add_argument('-path', '--path', default='models/encoder.pt')
 parser.add_argument('-lr', '--learning-rate', type=float, default=1e-4)
 parser.add_argument('-d', '--device', default='cuda')
@@ -50,7 +50,7 @@ scaler = torch.cuda.amp.GradScaler(enabled=args.fp16)
 model = load_or_init_models(device)
 Opt = optim.AdamW(model.parameters(), lr=args.learning_rate)
 
-hubert = HubertModel.from_pretrained(args.hubert).to(device).eval()
+hubert = WavLMModel.from_pretrained(args.wavlm).to(device).eval()
 
 weight = torch.ones(model.num_f0_classes)
 weight[0] = 1e-3

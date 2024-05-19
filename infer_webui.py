@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from module.encoder import Encoder
 from module.decoder import Decoder
-from module.convertor import Convertor
+from module.generator import Generator
 
 import gradio as gr
 
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     encoder.load_state_dict(torch.load(args.encoder_path, map_location=device))
     decoder = Decoder().to(device).eval()
     decoder.load_state_dict(torch.load(args.decoder_path, map_location=device))
-    convertor = Convertor(encoder, decoder).to(device)
+    generator = Generator(encoder, decoder)
 
     def audio_to_tensor(input_audio):
         input_sr, input_wf = input_audio
@@ -49,12 +49,17 @@ if __name__ == "__main__":
         input_wf = resample(input_wf, input_sr, 24000).to(device)
         return input_wf
 
-    def convert(input_audio, target_audio, pitch_shift):
+    def svc(input_audio, target_audio, pitch_shift, automatic_pitch_adaptation):
         input_wf = audio_to_tensor(input_audio)
         target_wf = audio_to_tensor(target_audio)
 
-        tgt = convertor.encode_target(target_wf)
-        output_wf = convertor.convert(input_wf, tgt, pitch_shift, device=device)
+        if automatic_pitch_adaptation:
+            _, x_stats = generator.encode_target(input_wf, with_stats=True)
+            tgt, y_stats = generator.encode_target(target_wf, with_stats=True)
+            output_wf = generator.convert(input_wf, tgt, pitch_shift, input_pitch_stats=x_stats, output_pitch_stats=y_stats, device=device).cpu().detach()
+        else:
+            tgt = generator.encode_target(target_wf)
+            output_wf = generator.convert(input_wf, tgt, pitch_shift, device=device).cpu().detach()
 
         output_wf = output_wf.clamp(-1.0, 1.0)
         output_wf = output_wf * 32768.0
@@ -62,11 +67,12 @@ if __name__ == "__main__":
         return (24000, output_wf)
     
     demo = gr.Interface(
-        convert,
+        svc,
         inputs=[
             gr.Audio(label="Input"),
             gr.Audio(label="Target"),
-            gr.Slider(-24.0, 24.0, 0.0, label="Pitch Shift")
+            gr.Slider(-24.0, 24.0, 0.0, label="Pitch Shift"),
+            gr.Checkbox(label="Automatic Pitch Adaptation (wip)", value=False)
         ],
         outputs=[
             gr.Audio()

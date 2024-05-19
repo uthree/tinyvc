@@ -216,11 +216,6 @@ class SourceNet(nn.Module):
         return amps, kernel
 
     def synthesize(self, content, energy, f0):
-        waveform_length = content.shape[2] * self.frame_size
-        N = content.shape[0]
-        device = content.device
-        dtype = content.dtype
-        
         # estimate DSP parameters
         amps, kernel = self.forward(content, energy, f0)
 

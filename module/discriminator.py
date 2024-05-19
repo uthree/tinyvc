@@ -11,7 +11,7 @@ class DiscriminatorP(nn.Module):
     def __init__(self, period, kernel_size=5, stride=3, channels=32, num_layers=4, max_channels=256, use_spectral_norm=False):
         super().__init__()
         self.period = period
-        norm_f = nn.utils.weight_norm if use_spectral_norm == False else nn.utils.spectral_norm
+        norm_f = nn.utils.parametrizations.weight_norm if use_spectral_norm == False else nn.utils.parametrizations.spectral_norm
         
         k = kernel_size
         s = stride
@@ -69,7 +69,7 @@ class MultiPeriodicDiscriminator(nn.Module):
 class DiscriminatorR(nn.Module):
     def __init__(self, resolution=128, channels=32, num_layers=4, max_channels=256):
         super().__init__()
-        norm_f = nn.utils.weight_norm
+        norm_f = nn.utils.parametrizations.weight_norm
         self.convs = nn.ModuleList([norm_f(nn.Conv2d(1, channels, (7, 3), (2, 1), (3, 1)))])
         self.hop_size = resolution
         self.n_fft = resolution * 4

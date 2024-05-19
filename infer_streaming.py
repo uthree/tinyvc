@@ -12,7 +12,7 @@ import pyaudio
 
 from module.encoder import Encoder
 from module.decoder import Decoder
-from module.convertor import Convertor
+from module.generator import Generator, StreamInfer
 
 
 parser = argparse.ArgumentParser(description="realtime inference")
@@ -25,7 +25,7 @@ parser.add_argument('-idx', '--index', default='NONE')
 parser.add_argument('-p', '--pitch-shift', default=0, type=float)
 parser.add_argument('-t', '--target', default='target.wav')
 parser.add_argument('-c', '--chunk', default=1920, type=int)
-parser.add_argument('-b', '--buffer', default=4, type=int)
+parser.add_argument('-e', '--extra', default=1920, type=int)
 parser.add_argument('-d', '--device', default='cpu')
 parser.add_argument('-sr', '--sample-rate', default=24000, type=int)
 parser.add_argument('-ig', '--input-gain', default=0, type=float)
@@ -39,7 +39,8 @@ encoder = Encoder().to(device).eval()
 encoder.load_state_dict(torch.load(args.encoder_path, map_location=device))
 decoder = Decoder().to(device).eval()
 decoder.load_state_dict(torch.load(args.decoder_path, map_location=device))
-convertor = Convertor(encoder, decoder).to(device)
+generator = Generator(encoder, decoder).to(device)
+stream_infer = StreamInfer(generator, pitch_shift=args.pitch_shift, block_size=args.chunk, device=device, extra_size=args.extra)
 
 audio = pyaudio.PyAudio()
 
@@ -62,32 +63,30 @@ stream_loopback = audio.open(
         output_device_index=args.loopback,
         output=True) if args.loopback != -1 else None
 
-BUFFER_SIZE = args.buffer * args.chunk
-CHUNK_SIZE = args.chunk
-
 # load target
 if args.index == 'NONE':
     wf, sr = torchaudio.load(args.target)
     wf = resample(wf, sr, 24000).to(device)
-    tgt = convertor.encode_target(wf)
+    tgt, _ = generator.encoder.infer(wf)
 else:
     tgt = torch.load(args.index).to(device)
+stream_infer.target = tgt
 
 pitch_shift = args.pitch_shift
 
 # initialize buffer
-buffer = convertor.init_buffer(BUFFER_SIZE, device=device)
+stream_infer.init_buffer()
 
 # inference loop
 print("Converting voice, Ctrl+C to stop conversion")
 while True:
-    chunk = stream_input.read(CHUNK_SIZE)
+    chunk = stream_input.read(args.chunk)
     chunk = np.frombuffer(chunk, dtype=np.int16).astype(np.float32)
     chunk = torch.from_numpy(chunk).to(device)
-    chunk = chunk.unsqueeze(0) / 32768
+    chunk = chunk / 32768
     
     chunk = gain(chunk, args.input_gain)
-    chunk, buffer = convertor.streaming_convert(chunk, buffer, tgt, pitch_shift, device)
+    chunk = stream_infer.audio_callback(chunk)
     chunk = gain(chunk, args.output_gain)
 
     chunk = chunk.cpu().numpy() * 32768

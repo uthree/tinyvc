@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from module.encoder import Encoder
 from module.decoder import Decoder
-from module.convertor import Convertor
+from module.generator import Generator
 from module.common import estimate_energy
 
 
@@ -36,7 +36,7 @@ encoder = Encoder().to(device).eval()
 encoder.load_state_dict(torch.load(args.encoder_path, map_location=device))
 decoder = Decoder().to(device).eval()
 decoder.load_state_dict(torch.load(args.decoder_path, map_location=device))
-convertor = Convertor(encoder, decoder).to(device)
+generator = Generator(encoder, decoder)
 
 chunk_size = args.chunk_size
 buffer_size = args.buffer_size * chunk_size
@@ -45,7 +45,7 @@ buffer_size = args.buffer_size * chunk_size
 if args.index == 'NONE':
     wf, sr = torchaudio.load(args.target)
     wf = resample(wf, sr, 24000).to(device)
-    tgt = convertor.encode_target(wf)
+    tgt = generator.encode_target(wf)
 else:
     tgt = torch.load(args.index).to(device)
 
@@ -64,7 +64,7 @@ for i, path in enumerate(paths):
     wf = resample(wf, sr, 24000)
     wf = wf.mean(dim=0, keepdim=True)
     
-    wf = convertor.convert(wf, tgt, args.pitch_shift, args.device, args.f0_estimation, args.chunk_size, args.buffer_size * args.chunk_size, args.no_chunking)
+    wf = generator.convert(wf, tgt, args.pitch_shift, args.device).cpu().detach()
 
     file_name = f"{os.path.splitext(os.path.basename(path))[0]}"
     torchaudio.save(os.path.join(args.outputs, f"{file_name}.wav"), src=wf, sample_rate=24000)

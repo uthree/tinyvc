@@ -95,11 +95,12 @@ for epoch in range(args.epoch):
         wave = wave.to(device) * torch.rand(N, 1, device=device) * 2.0
         f0 = f0.to(device)
         spk_id = spk_id.to(device)
+        spec = spectrogram(wave, encoder.n_fft, encoder.hop_size)
 
         # train Generator
         OptG.zero_grad()
         with torch.cuda.amp.autocast(enabled=args.fp16):
-            z, f0 = encoder.infer(wave)
+            z, f0 = encoder.infer(spec)
             z_fake = match_features(z, z).detach()
             energy = estimate_energy(wave, decoder.frame_size)
             dsp_out = decoder.source_net.synthesize(z_fake, energy, f0)
