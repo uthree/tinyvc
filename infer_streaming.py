@@ -67,7 +67,7 @@ stream_loopback = audio.open(
 if args.index == 'NONE':
     wf, sr = torchaudio.load(args.target)
     wf = resample(wf, sr, 24000).to(device)
-    tgt, _ = generator.encoder.infer(wf)
+    tgt = generator.encode_target(wf)
 else:
     tgt = torch.load(args.index).to(device)
 stream_infer.target = tgt
