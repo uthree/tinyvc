@@ -56,7 +56,7 @@ class Generator(nn.Module):
         else:
             return z
 
-    def convert(self, wf, tgt, pitch_shift, device=torch.device('cpu'), f0_estimation='default', input_pitch_stats=None, output_pitch_stats=None):
+    def convert(self, wf, tgt, pitch_shift, f0_estimation='default', input_pitch_stats=None, output_pitch_stats=None, device=torch.device('cpu')):
         # estimate energy, encode content, estimate pitch
         energy = estimate_energy(wf)
         spec = spectrogram(wf, self.encoder.n_fft, self.encoder.hop_size)
@@ -108,7 +108,8 @@ class StreamInfer:
             device=torch.device('cpu'),
             block_size=1920,
             extra_size=0,
-            use_phase_vocoder=False):
+            use_phase_vocoder=False,
+            f0_estimation='default'):
         self.pitch_shift = pitch_shift
         self.generator = generator
         self.device = device
@@ -120,6 +121,7 @@ class StreamInfer:
         self.last_dilay_size = 480
         self.crossfade_size = 960
         self.use_phase_vocoder = use_phase_vocoder
+        self.f0_estimation = f0_estimation
 
         self.input_size = max(
             self.block_size + self.crossfade_size + self.sola_search_size + 2 * self.last_dilay_size,
@@ -139,7 +141,7 @@ class StreamInfer:
         self.input_wav = torch.roll(self.input_wav, -self.block_size)
         self.input_wav[-self.block_size:] = block
 
-        y = self.generator.convert(self.input_wav[None], self.target, self.pitch_shift, device=self.device).squeeze(0)
+        y = self.generator.convert(self.input_wav[None], self.target, self.pitch_shift, device=self.device, f0_estimation=self.f0_estimation).squeeze(0)
 
         # sola shift
         temp_wav = y[-self.block_size-self.crossfade_size-self.sola_search_size-self.last_dilay_size:-self.last_dilay_size ]

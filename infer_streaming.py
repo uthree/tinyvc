@@ -30,6 +30,7 @@ parser.add_argument('-d', '--device', default='cpu')
 parser.add_argument('-sr', '--sample-rate', default=24000, type=int)
 parser.add_argument('-ig', '--input-gain', default=0, type=float)
 parser.add_argument('-og', '--output-gain', default=0, type=float)
+parser.add_argument('-pe', '--pitch-estimation', default='default', choices=['default', 'harvest', 'dio', 'fcpe'])
 
 args = parser.parse_args()
 
@@ -40,7 +41,7 @@ encoder.load_state_dict(torch.load(args.encoder_path, map_location=device))
 decoder = Decoder().to(device).eval()
 decoder.load_state_dict(torch.load(args.decoder_path, map_location=device))
 generator = Generator(encoder, decoder).to(device)
-stream_infer = StreamInfer(generator, pitch_shift=args.pitch_shift, block_size=args.chunk, device=device, extra_size=args.extra)
+stream_infer = StreamInfer(generator, pitch_shift=args.pitch_shift, block_size=args.chunk, device=device, extra_size=args.extra, f0_estimation=args.pitch_estimation)
 
 audio = pyaudio.PyAudio()
 
