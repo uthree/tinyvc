@@ -18,7 +18,7 @@ from transformers import WavLMModel
 
 from torch.utils.tensorboard import SummaryWriter
 
-parser = argparse.ArgumentParser(description="distillation of HuBERT-Base 4th layer / Pitch Estimation")
+parser = argparse.ArgumentParser(description="distillation of WavLM-Base 4th layer / Pitch Estimation")
 
 parser.add_argument('--dataset-cache', default='dataset_cache')
 parser.add_argument('--noises', default='NONE')
