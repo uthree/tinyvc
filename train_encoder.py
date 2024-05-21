@@ -110,7 +110,7 @@ for epoch in range(args.epoch):
 
         step_count += 1
 
-        tqdm.write(f"Epoch: {epoch}, Step {step_count}, F0 Est.: {loss_f0.item():.4f}, Hubert Distill.: {loss_distill.item():.4f}")
+        tqdm.write(f"Epoch: {epoch}, Step {step_count}, F0 Est.: {loss_f0.item():.4f}, Distill.: {loss_distill.item():.4f}")
 
         bar.update(N)
 

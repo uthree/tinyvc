@@ -16,7 +16,7 @@ parser = argparse.ArgumentParser(description="preprocess")
 
 parser.add_argument('input')
 parser.add_argument('-o', '--output', default='dataset_cache')
-parser.add_argument('-len', '--length', default=24000, type=int)
+parser.add_argument('-len', '--length', default=48000, type=int)
 parser.add_argument('--num-speakers', default=8192, type=int)
 parser.add_argument('-m', '--max-files', default=-1, type=int)
 parser.add_argument('-d', '--device', default='cuda')
