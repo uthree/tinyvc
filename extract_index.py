@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from module.dataset import Dataset
 from module.encoder import Encoder
+from module.common import spectrogram
 
 parser = argparse.ArgumentParser(description="extract index")
 parser.add_argument('--dataset-cache', default='dataset_cache')
@@ -40,7 +41,8 @@ total_length = 0
 print("Extracting...")
 bar = tqdm(total=args.size)
 for i, (wave, f0, spk_id) in enumerate(dl):
-    z, f0 = encoder.infer(wave.to(device))
+    spec = spectrogram(wave, encoder.n_fft, encoder.hop_size)
+    z, f0 = encoder.infer(spec)
     z = z.cpu()[:, :, ::args.stride]
     total_length += z.shape[2]
     features.append(z)
