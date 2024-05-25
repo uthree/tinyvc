@@ -10,10 +10,10 @@ from torchaudio.functional import resample
 
 from tqdm import tqdm
 
-from module.dataset import Dataset
-from module.encoder import Encoder
-from module.common import spectrogram
-from module.noise_generator import NoiseGenerator
+from module.utils.dataset import Dataset
+from module.tinyvc.encoder import Encoder
+from module.utils.spectrogram import spectrogram
+from module.utils.noise_generator import NoiseGenerator
 from transformers import WavLMModel
 
 from torch.utils.tensorboard import SummaryWriter
@@ -52,10 +52,6 @@ Opt = optim.AdamW(model.parameters(), lr=args.learning_rate)
 
 hubert = WavLMModel.from_pretrained(args.wavlm).to(device).eval()
 
-weight = torch.ones(model.num_f0_classes)
-weight[0] = 1e-3
-cross_entropy_f0 = nn.CrossEntropyLoss(weight).to(device)
-
 writer = SummaryWriter(log_dir="./logs")
 
 # for noise reduction
@@ -69,7 +65,7 @@ step_count = 0
 for epoch in range(args.epoch):
     tqdm.write(f"Epoch #{epoch}")
     bar = tqdm(total=len(ds))
-    for batch, (wave, f0, spk_id) in enumerate(dl):
+    for batch, (wave, f0) in enumerate(dl):
         N = wave.shape[0]
         wave = wave.to(device)
         f0 = f0.to(device)
@@ -80,7 +76,7 @@ for epoch in range(args.epoch):
             # get pseudo-label
             hubert_features = hubert(wave_16k, output_hidden_states=True).hidden_states[4]
             hubert_features = hubert_features.transpose(1, 2)
-            f0_label = model.freq2id(f0).squeeze(1)
+            f0_label = model.pitch_estimator.freq2id(f0).squeeze(1)
 
             # data argumentation
             wave = wave * torch.rand(N, 1, device=device) * 2
@@ -94,7 +90,7 @@ for epoch in range(args.epoch):
 
             # loss
             loss_distill = (z - F.interpolate(hubert_features, z.shape[2])).abs().mean()
-            loss_f0 = cross_entropy_f0(f0_out, f0_label)
+            loss_f0 = F.cross_entropy(f0_out, f0_label)
             loss = loss_f0 + loss_distill * 45
 
             # logging

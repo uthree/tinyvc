@@ -13,7 +13,8 @@ class Dataset(torch.utils.data.Dataset):
         return self.len
 
     def __getitem__(self, idx):
-        f0, spk_id = torch.load(self.dir_path / f"{idx}.pt")
+        obj = torch.load(self.dir_path / f"{idx}.pt")
         wf, _ = torchaudio.load(self.dir_path / f"{idx}.wav")
         wf = wf.mean(dim=0)
-        return wf, f0, spk_id
+        f0 = obj["f0"].squeeze(0)
+        return wf, f0

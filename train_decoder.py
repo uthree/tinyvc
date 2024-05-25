@@ -8,12 +8,10 @@ import torch.optim as optim
 
 from tqdm import tqdm
 
-from module.dataset import Dataset
-from module.common import spectrogram, estimate_energy
-from module.loss import MultiScaleSTFTLoss, LogMelSpectrogramLoss
-from module.encoder import Encoder
-from module.decoder import Decoder, match_features
-from module.discriminator import Discriminator
+from module.utils.dataset import Dataset
+from module.utils import spectrogram, estimate_energy
+from module.utils.loss import MultiScaleSTFTLoss, LogMelSpectrogramLoss
+from module.tinyvc import Encoder, Decoder, Discriminator, match_features
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -88,13 +86,12 @@ step_count = 0
 for epoch in range(args.epoch):
     tqdm.write(f"Epoch #{epoch}")
     bar = tqdm(total=len(ds))
-    for batch, (wave, f0, spk_id) in enumerate(dl):
+    for batch, (wave, f0) in enumerate(dl):
         d_join = (args.discriminator_join <= step_count)
 
         N = wave.shape[0]
         wave = wave.to(device) * torch.rand(N, 1, device=device) * 2.0
         f0 = f0.to(device)
-        spk_id = spk_id.to(device)
         spec = spectrogram(wave, encoder.n_fft, encoder.hop_size)
 
         # train Generator
@@ -103,14 +100,15 @@ for epoch in range(args.epoch):
             z, f0 = encoder.infer(spec)
             z_fake = match_features(z, z).detach()
             energy = estimate_energy(wave, decoder.frame_size)
-            dsp_out = decoder.source_net.synthesize(z_fake, energy, f0)
-            fake = decoder.filter_net.synthesize(z_fake, energy, dsp_out)
-            
-            fake = fake.squeeze(1)
+
+            amps, kernel = decoder.source_net(z_fake, f0, energy)
+            dsp_out = decoder.dsp(f0, amps, kernel)
+            fake = decoder.filter_net(z_fake, f0, energy, dsp_out)
 
             loss_dsp = SpecLoss(dsp_out.sum(dim=1), wave)
-            loss_spec = SpecLoss(fake, wave)
+            loss_spec = SpecLoss(fake.squeeze(1), wave)
 
+            fake = fake.squeeze(1)
             if d_join:
                 loss_adv = 0
                 fake = fake.clamp(-1.0, 1.0)

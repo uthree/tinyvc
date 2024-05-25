@@ -2,8 +2,9 @@ import argparse
 import torch
 from pathlib import Path
 import numpy as np
-from module.encoder import Encoder
-from module.decoder import Decoder
+from module.tinyvc import Encoder
+from module.tinyvc import Decoder
+from module.infer import Generator
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-o', '--output-dir', default='onnx')

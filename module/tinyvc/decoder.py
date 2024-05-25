@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .convnext import ConvNeXtLayer
+
 
 # Oscillate harmonic signal
 # 基音と倍音を生成
@@ -19,7 +21,6 @@ import torch.nn.functional as F
 # Output: [BatchSize, NumHarmonics+1, Length]
 #
 # length = Frames * frame_size
-@torch.cuda.amp.autocast(enabled=False)
 def oscillate_harmonics(
         f0,
         frame_size=480,
@@ -59,65 +60,30 @@ def oscillate_harmonics(
 # kernel: [BatchSize, fft_bin, Length]
 #
 # Output: [BatchSize, 1, Length * frame_size]
-@torch.cuda.amp.autocast(enabled=False)
 def oscillate_noise(
         kernel,
         frame_size=480,
         n_fft=1920
     ):
-    device = kernel.device
     N = kernel.shape[0]
     Lf = kernel.shape[2] # frame length
-    Lw = Lf * frame_size # waveform length
+    fft_bin = n_fft // 2 + 1
     dtype = kernel.dtype
 
-    gaussian_noise = torch.randn(N, Lw, device=device, dtype=torch.float)
     kernel = kernel.to(torch.float) # to fp32
 
     # calculate convolution in fourier-domain
     # Since the input is an aperiodic signal such as Gaussian noise,
     # there is no need to consider the phase on the kernel side.
-    w = torch.hann_window(n_fft, dtype=torch.float, device=device)
-    noise_stft = torch.stft(gaussian_noise, n_fft, frame_size, window=w, return_complex=True)[:, :, 1:]
+    angle = torch.rand(N, fft_bin, Lf, device=kernel.device) * 2 * math.pi - math.pi
+    noise_stft = torch.exp(1j * angle)
     y_stft = noise_stft * kernel # In fourier domain, Multiplication means convolution.
     y_stft = F.pad(y_stft, [1, 0]) # pad
+    w = torch.hann_window(n_fft, device=kernel.device)
     y = torch.istft(y_stft, n_fft, frame_size, window=w)
     y = y.unsqueeze(1)
     y = y.to(dtype)
     return y
-
-
-# Convert style based kNN.
-# Warning: this method is not optimized.
-# Do not give long sequence. computing complexy is quadratic.
-# 
-# source: [BatchSize, Channels, Length]
-# reference: [BatchSize, Channels, Length]
-# k: int
-# alpha: float (0.0 ~ 1.0)
-# metrics: one of ['IP', 'L2', 'cos'], 'IP' means innner product, 'L2' means euclid distance, 'cos' means cosine similarity
-# Output: [BatchSize, Channels, Length]
-def match_features(source, reference, k=4, alpha=0.0, metrics='cos'):
-    input_data = source
-
-    source = source.transpose(1, 2)
-    reference = reference.transpose(1, 2)
-    if metrics == 'IP':
-        sims = torch.bmm(source, reference.transpose(1, 2))
-    elif metrics == 'L2':
-        sims = -torch.cdist(source, reference)
-    elif metrics == 'cos':
-        reference_norm = torch.norm(reference, dim=2, keepdim=True, p=2) + 1e-6
-        source_norm = torch.norm(source, dim=2, keepdim=True, p=2) + 1e-6
-        sims = torch.bmm(source / source_norm, (reference / reference_norm).transpose(1, 2))
-    best = torch.topk(sims, k, dim=2)
-
-    result = torch.stack([reference[n][best.indices[n]] for n in range(source.shape[0])], dim=0).mean(dim=2)
-    result = result.transpose(1, 2)
-
-    return result * (1-alpha) + input_data * alpha
-
-
 
 
 class FiLM(nn.Module):
@@ -132,61 +98,12 @@ class FiLM(nn.Module):
         return x * scale + shift
 
 
-class LayerNorm(nn.Module):
-    def __init__(self, channels, eps=1e-6):
-        super().__init__()
-        self.scale = nn.Parameter(torch.ones(1, channels, 1))
-        self.shift = nn.Parameter(torch.zeros(1, channels, 1))
-        self.eps = eps
-
-    def forward(self, x):
-        mu = x.mean(dim=(1, 2), keepdim=True)
-        sigma = x.std(dim=(1, 2), keepdim=True) + self.eps
-        x = (x - mu) / sigma
-        x = x * self.scale + self.shift
-        return x
-
-
-class GRN(nn.Module):
-    def __init__(self, channels, eps=1e-6):
-        super().__init__()
-        self.beta = nn.Parameter(torch.zeros(1, channels, 1))
-        self.gamma = nn.Parameter(torch.zeros(1, channels, 1))
-        self.eps = eps
-    
-    def forward(self, x):
-        gx = torch.norm(x, p=2, dim=2, keepdim=True)
-        nx = gx / (gx.mean(dim=1, keepdim=True) + self.eps)
-        return self.gamma * (x * nx) + self.beta + x
-
-
-class SourceNetLayer(nn.Module):
-    def __init__(self, channels, kernel_size=7, dilation=1):
-        super().__init__()
-        padding = (kernel_size - 1) * dilation // 2
-        self.c1 = nn.Conv1d(channels, channels, kernel_size, 1, padding, dilation=dilation, padding_mode='replicate', groups=channels)
-        self.norm = LayerNorm(channels)
-        self.c2 = nn.Conv1d(channels, channels * 2, 1)
-        self.grn = GRN(channels * 2)
-        self.c3 = nn.Conv1d(channels * 2, channels, 1)
-
-    def forward(self, x):
-        res = x
-        x = self.c1(x)
-        x = self.norm(x)
-        x = self.c2(x)
-        x = F.gelu(x)
-        x = self.grn(x)
-        x = self.c3(x)
-        return x + res
-
-
 # Source Network.
 # This network estimate each harmonic's amplitude and linear filter to noise transformation.
 class SourceNet(nn.Module):
     def __init__(self,
                  content_channels=768,
-                 channels=256,
+                 channels=128,
                  kernel_size=7,
                  num_layers=3,
                  n_fft=1920,
@@ -203,32 +120,17 @@ class SourceNet(nn.Module):
         self.content_in = nn.Conv1d(content_channels, channels, 1)
         self.energy_in = nn.Conv1d(1, channels, 1)
         self.f0_in = nn.Conv1d(1, channels, 1)
-        self.mid_layers = nn.Sequential(*[SourceNetLayer(channels, kernel_size) for _ in range(num_layers)])
+        self.mid_layers = nn.Sequential(*[ConvNeXtLayer(channels, kernel_size) for _ in range(num_layers)])
         self.to_amps = nn.Conv1d(channels, num_harmonics + 1, 1)
         self.to_kernel = nn.Conv1d(channels, fft_bin, 1)
 
-    def forward(self, content, energy, f0):
+    def forward(self, content, f0, energy):
+        energy = F.avg_pool1d(energy, self.frame_size, self.frame_size)
         x = self.content_in(content) + self.energy_in(energy) + self.f0_in(torch.log(F.relu(f0) + 1e-6))
         x = self.mid_layers(x)
-        amps = F.elu(self.to_amps(x)) + 1
-        kernel = F.elu(self.to_kernel(x)) + 1
-        amps = F.interpolate(amps, scale_factor=self.frame_size, mode='linear')
+        amps = F.relu(self.to_amps(x))
+        kernel = F.relu(self.to_kernel(x))
         return amps, kernel
-
-    def synthesize(self, content, energy, f0):
-        # estimate DSP parameters
-        amps, kernel = self.forward(content, energy, f0)
-
-        # oscillate harmonics
-        harmonics = oscillate_harmonics(f0, self.frame_size, self.sample_rate, self.num_harmonics)
-        harmonics = harmonics * amps
-
-        # oscillate noise
-        noise = oscillate_noise(kernel, self.frame_size, self.n_fft)
-
-        # concatenate and return output
-        output = torch.cat([harmonics, noise], dim=1)
-        return output
 
 
 class Downsample(nn.Module):
@@ -296,11 +198,11 @@ class FilterNet(nn.Module):
         super().__init__()
         # input layer 
         self.content_in = nn.Conv1d(content_channels, channels[0], 1)
-        self.energy_in = nn.Conv1d(1, channels[0], 1)
+        self.f0_in = nn.Conv1d(1, channels[0], 1)
 
         # donwsamples
         self.downs = nn.ModuleList([])
-        self.downs.append(nn.Conv1d(num_harmonics + 2, channels[-1], 3, 1, 1, padding_mode='replicate'))
+        self.downs.append(nn.Conv1d(num_harmonics + 3, channels[-1], 3, 1, 1, padding_mode='replicate'))
         cs = list(reversed(channels[1:]))
         ns = cs[1:] + [channels[0]]
         fs = list(reversed(factors[1:]))
@@ -316,9 +218,9 @@ class FilterNet(nn.Module):
             self.ups.append(Upsample(c, n, c, f))
         self.output_layer = nn.Conv1d(channels[-1], 1, 7, 1, 3, padding_mode='replicate')
 
-    def forward(self, content, energy, source):
-        x = self.content_in(content) + self.energy_in(energy)
-        src = source
+    def forward(self, content, f0, energy, source):
+        x = self.content_in(content) + self.f0_in(torch.log(F.relu(f0) + 1e-6))
+        src = torch.cat([source, energy], dim=1)
 
         skips = []
         for down in self.downs:
@@ -329,19 +231,35 @@ class FilterNet(nn.Module):
             x = up(x, s)
         return self.output_layer(x)
 
-    def synthesize(self, content, energy, source):
-        return self.forward(content, energy, source)
-
 
 class Decoder(nn.Module):
-    def __init__(self, sample_rate=24000, frame_size=480):
+    def __init__(
+            self,
+            sample_rate=24000,
+            n_fft = 1920,
+            frame_size=480,
+            num_harmonics=14,
+        ):
         super().__init__()
         self.sample_rate = sample_rate
         self.frame_size = frame_size
-        self.source_net = SourceNet(frame_size=frame_size, sample_rate=sample_rate)
+        self.num_harmonics = num_harmonics
+        self.n_fft = n_fft
+
+        self.source_net = SourceNet(frame_size=frame_size, sample_rate=sample_rate, n_fft=n_fft)
         self.filter_net = FilterNet()
 
-    def infer(self, content, energy, f0):
-        src = self.source_net.synthesize(content, energy, f0)
-        out = self.filter_net.synthesize(content, energy, src)
-        return out
+    def infer(self, content, f0, energy):
+        amps, kernel = self.source_net(content, f0, energy)
+        src = self.dsp(f0, amps, kernel)
+        out = self.filter_net(content, f0, energy, src)
+        return out.squeeze(1)
+    
+    @torch.cuda.amp.autocast(enabled=False)
+    def dsp(self, f0, amps, kernel):
+        harmonics = oscillate_harmonics(f0, self.frame_size, self.sample_rate, self.num_harmonics)
+        amps = F.interpolate(amps, scale_factor=self.frame_size, mode='linear')
+        harmonics = harmonics * amps
+        noise = oscillate_noise(kernel, self.frame_size, self.n_fft)
+        source = torch.cat([harmonics, noise], dim=1)
+        return source

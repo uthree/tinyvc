@@ -9,9 +9,9 @@ from torchaudio.functional import resample
 
 from tqdm import tqdm
 
-from module.encoder import Encoder
-from module.decoder import Decoder
-from module.generator import Generator
+from module.tinyvc import Encoder
+from module.tinyvc import Decoder
+from module.infer import Generator
 
 import gradio as gr
 
@@ -49,17 +49,12 @@ if __name__ == "__main__":
         input_wf = resample(input_wf, input_sr, 24000).to(device)
         return input_wf
 
-    def svc(input_audio, target_audio, pitch_shift, pitch_estimation, automatic_pitch_adaptation):
+    def svc(input_audio, target_audio, pitch_shift, pitch_estimation):
         input_wf = audio_to_tensor(input_audio)
         target_wf = audio_to_tensor(target_audio)
 
-        if automatic_pitch_adaptation:
-            _, x_stats = generator.encode_target(input_wf, with_stats=True)
-            tgt, y_stats = generator.encode_target(target_wf, with_stats=True)
-            output_wf = generator.convert(input_wf, tgt, pitch_shift, input_pitch_stats=x_stats, output_pitch_stats=y_stats, pitch_estimation=pitch_estimation, device=device).cpu().detach()
-        else:
-            tgt = generator.encode_target(target_wf)
-            output_wf = generator.convert(input_wf, tgt, pitch_shift, device=device).cpu().detach()
+        tgt, _ = generator.encode(target_wf)
+        output_wf = generator.convert(input_wf, tgt, pitch_shift, device=device).cpu().detach()
 
         output_wf = output_wf.clamp(-1.0, 1.0)
         output_wf = output_wf * 32768.0
@@ -73,7 +68,6 @@ if __name__ == "__main__":
             gr.Audio(label="Target"),
             gr.Slider(-24.0, 24.0, 0.0, label="Pitch Shift"),
             gr.Dropdown(choices=['default', 'fcpe', 'harvest', 'dio'], value='default'),
-            gr.Checkbox(label="Automatic Pitch Adaptation (wip)", value=False)
         ],
         outputs=[
             gr.Audio()

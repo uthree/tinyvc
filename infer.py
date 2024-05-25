@@ -9,10 +9,9 @@ from torchaudio.functional import resample
 
 from tqdm import tqdm
 
-from module.encoder import Encoder
-from module.decoder import Decoder
-from module.generator import Generator
-from module.common import estimate_energy
+from module.tinyvc import Encoder
+from module.tinyvc import Decoder
+from module.infer import Generator
 
 
 parser = argparse.ArgumentParser()
@@ -45,7 +44,7 @@ buffer_size = args.buffer_size * chunk_size
 if args.index == 'NONE':
     wf, sr = torchaudio.load(args.target)
     wf = resample(wf, sr, 24000).to(device)
-    tgt = generator.encode_target(wf)
+    tgt, _ = generator.encode(wf)
 else:
     tgt = torch.load(args.index).to(device)
 
