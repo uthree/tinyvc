@@ -145,7 +145,8 @@ for epoch in range(args.epoch):
             scaler.scale(loss_d).backward()
             nn.utils.clip_grad_norm_(discriminator.parameters(), 1.0)
             scaler.step(OptD)
-            writer.add_scalar("loss/Discriminator Adversarial", loss_d.item(), step_count)
+            if step_count % 50 == 0:
+                writer.add_scalar("loss/Discriminator Adversarial", loss_d.item(), step_count)
         
         if d_join:
             tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Dis.: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Spec.: {loss_spec.item():.4f}, Feat. {loss_feat.item():.4f}")
