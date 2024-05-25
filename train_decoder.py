@@ -33,8 +33,8 @@ parser.add_argument('-fp16', default=False, type=bool)
 
 parser.add_argument('--weight-adv', default=1.0, type=float)
 parser.add_argument('--weight-dsp', default=1.0, type=float)
-parser.add_argument('--weight-spec', default=45.0, type=float)
-parser.add_argument('--weight-feat', default=1.0, type=float)
+parser.add_argument('--weight-spec', default=2.0, type=float)
+parser.add_argument('--weight-feat', default=10.0, type=float)
 
 args = parser.parse_args()
 
@@ -105,7 +105,7 @@ for epoch in range(args.epoch):
             dsp_out = decoder.dsp(f0, amps, kernel)
             fake = decoder.filter_net(z_fake, f0, energy, dsp_out)
 
-            loss_dsp = SpecLoss(dsp_out.sum(dim=1), wave)
+            loss_dsp = SpecLoss(dsp_out.sum(1), wave)
             loss_spec = SpecLoss(fake.squeeze(1), wave)
 
             fake = fake.squeeze(1)
