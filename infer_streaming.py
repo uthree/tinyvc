@@ -10,9 +10,9 @@ from torchaudio.functional import resample, gain
 import numpy as np
 import pyaudio
 
-from module.encoder import Encoder
-from module.decoder import Decoder
-from module.generator import Generator, StreamInfer
+from module.tinyvc import Encoder
+from module.tinyvc import Decoder
+from module.infer import Generator, StreamInfer
 
 
 parser = argparse.ArgumentParser(description="realtime inference")
