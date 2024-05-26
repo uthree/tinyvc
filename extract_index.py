@@ -8,9 +8,9 @@ import torch.optim as optim
 
 from tqdm import tqdm
 
-from module.dataset import Dataset
-from module.encoder import Encoder
-from module.common import spectrogram
+from module.utils.dataset import Dataset
+from module.tinyvc import Encoder
+from module.utils.spectrogram import spectrogram
 
 parser = argparse.ArgumentParser(description="extract index")
 parser.add_argument('--dataset-cache', default='dataset_cache')
@@ -40,7 +40,7 @@ total_length = 0
 
 print("Extracting...")
 bar = tqdm(total=args.size)
-for i, (wave, f0, spk_id) in enumerate(dl):
+for i, (wave, f0) in enumerate(dl):
     spec = spectrogram(wave, encoder.n_fft, encoder.hop_size)
     z, f0 = encoder.infer(spec)
     z = z.cpu()[:, :, ::args.stride]

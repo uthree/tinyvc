@@ -1,8 +1,11 @@
+import math
+import random
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .convnext import ConvNeXtLayer
+from .convnext import ConvNeXtLayer, LayerNorm
 
 
 class PitchEstimator(nn.Module):
@@ -22,12 +25,14 @@ class PitchEstimator(nn.Module):
 
         fft_bin = n_fft // 2 + 1
         self.input_layer = nn.Conv1d(fft_bin, internal_channels, 1)
+        self.norm = LayerNorm(internal_channels)
         self.mid_layers = nn.Sequential(*[ConvNeXtLayer(internal_channels) for _ in range(num_layers)])
         self.output_layer = nn.Conv1d(internal_channels, num_classes, 1)
 
     # spec: [BatchSize, fft_bin, Length]
     def forward(self, spec):
         x = self.input_layer(spec)
+        x = self.norm(x)
         x = self.mid_layers(x)
         x = self.output_layer(x)
         return x
@@ -72,16 +77,18 @@ class SSLFeatureEstimator(nn.Module):
             self,
             n_fft=1920,
             internal_channels=384,
-            dilations=[1, 2, 3, 1],
+            dilations=[1, 3, 9, 1, 1, 1],
             ssl_dim=768):
         super().__init__()
         fft_bin = n_fft // 2 + 1
         self.input_layer = nn.Conv1d(fft_bin, internal_channels, 1)
+        self.norm = LayerNorm(internal_channels)
         self.mid_layers = nn.Sequential(*[ConvNeXtLayer(internal_channels, dilation=d) for d in dilations])
         self.output_layer = nn.Conv1d(internal_channels, ssl_dim, 1)
 
     def forward(self, spec):
         x = self.input_layer(spec)
+        x = self.norm(x)
         x = self.mid_layers(x)
         x = self.output_layer(x)
         return x
