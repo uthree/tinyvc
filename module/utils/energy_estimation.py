@@ -9,6 +9,6 @@ import torch.nn.functional as F
 def estimate_energy(wave,
            frame_size=64):
     wave_length = wave.shape[1]
-    energy = F.max_pool1d((wave ** 2).unsqueeze(1), frame_size)
+    energy = F.max_pool1d((wave.abs()).unsqueeze(1), frame_size * 2, frame_size, frame_size // 2)
     energy = F.interpolate(energy, wave_length, mode='linear')
     return energy
