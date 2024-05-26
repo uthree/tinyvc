@@ -36,10 +36,10 @@ class GRN(nn.Module):
 
 # ConvNeXt v2
 class ConvNeXtLayer(nn.Module):
-    def __init__(self, channels=512, kernel_size=7, mlp_mul=2):
+    def __init__(self, channels=512, kernel_size=7, mlp_mul=2, dilation=1):
         super().__init__()
-        padding = kernel_size // 2
-        self.c1 = nn.Conv1d(channels, channels, kernel_size, 1, padding, groups=channels, padding_mode='replicate')
+        padding = int((kernel_size*dilation - dilation)/2)
+        self.c1 = nn.Conv1d(channels, channels, kernel_size, 1, padding, groups=channels, dilation=dilation, padding_mode='replicate')
         self.norm = LayerNorm(channels)
         self.c2 = nn.Conv1d(channels, channels * mlp_mul, 1)
         self.grn = GRN(channels * mlp_mul)

@@ -72,12 +72,12 @@ class SSLFeatureEstimator(nn.Module):
             self,
             n_fft=1920,
             internal_channels=384,
-            num_layers=4,
+            dilations=[1, 2, 3, 1],
             ssl_dim=768):
         super().__init__()
         fft_bin = n_fft // 2 + 1
         self.input_layer = nn.Conv1d(fft_bin, internal_channels, 1)
-        self.mid_layers = nn.Sequential(*[ConvNeXtLayer(internal_channels) for _ in range(num_layers)])
+        self.mid_layers = nn.Sequential(*[ConvNeXtLayer(internal_channels, dilation=d) for d in dilations])
         self.output_layer = nn.Conv1d(internal_channels, ssl_dim, 1)
 
     def forward(self, spec):
