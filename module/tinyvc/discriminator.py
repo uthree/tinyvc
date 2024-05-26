@@ -111,7 +111,7 @@ class DiscriminatorR(nn.Module):
 class MultiResolutionDiscriminator(nn.Module):
     def __init__(
             self,
-            resolutions=[128, 256, 512],
+            resolutions=[32, 64, 128, 256],
             channels=32,
             num_layers=4,
             max_channels=256,

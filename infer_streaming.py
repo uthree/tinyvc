@@ -25,7 +25,7 @@ parser.add_argument('-idx', '--index', default='NONE')
 parser.add_argument('-p', '--pitch-shift', default=0, type=float)
 parser.add_argument('-t', '--target', default='target.wav')
 parser.add_argument('-c', '--chunk', default=1920, type=int)
-parser.add_argument('-e', '--extra', default=1920, type=int)
+parser.add_argument('-e', '--extra', default=0, type=int)
 parser.add_argument('-d', '--device', default='cpu')
 parser.add_argument('-sr', '--sample-rate', default=24000, type=int)
 parser.add_argument('-ig', '--input-gain', default=0, type=float)
@@ -68,7 +68,7 @@ stream_loopback = audio.open(
 if args.index == 'NONE':
     wf, sr = torchaudio.load(args.target)
     wf = resample(wf, sr, 24000).to(device)
-    tgt = generator.encode_target(wf)
+    tgt, _ = generator.encode(wf)
 else:
     tgt = torch.load(args.index).to(device)
 stream_infer.target = tgt
