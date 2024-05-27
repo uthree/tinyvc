@@ -79,8 +79,7 @@ def oscillate_noise(
     noise_stft = torch.exp(1j * angle)
     y_stft = noise_stft * kernel # In fourier domain, Multiplication means convolution.
     y_stft = F.pad(y_stft, [1, 0]) # pad
-    w = torch.hann_window(n_fft, device=kernel.device)
-    y = torch.istft(y_stft, n_fft, frame_size, window=w)
+    y = torch.istft(y_stft, n_fft, frame_size)
     y = y.unsqueeze(1)
     y = y.to(dtype)
     return y
@@ -125,7 +124,7 @@ class SourceNet(nn.Module):
         self.to_kernel = nn.Conv1d(channels, fft_bin, 1)
 
     def forward(self, content, f0, energy):
-        energy = F.avg_pool1d(energy, self.frame_size, self.frame_size)
+        energy = F.max_pool1d(energy, self.frame_size, self.frame_size)
         x = self.content_in(content) + self.energy_in(energy) + self.f0_in(torch.log(F.relu(f0) + 1e-6))
         x = self.mid_layers(x)
         # 実はこの活性化めっちゃ優秀説ある
@@ -146,7 +145,7 @@ class Downsample(nn.Module):
         self.c3 = nn.Conv1d(input_channels, output_channels, 3, 1, 4, dilation=4, padding_mode='replicate')
 
     def forward(self, x):
-        x = F.interpolate(x, scale_factor=1.0/self.factor)
+        x = F.interpolate(x, scale_factor=1.0/self.factor, mode='linear')
         res = self.down_res(x)
         x = F.leaky_relu(x, 0.1)
         x = self.c1(x)

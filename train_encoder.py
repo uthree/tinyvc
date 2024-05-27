@@ -62,6 +62,9 @@ if args.noises != 'NONE':
 else:
     add_noise = False
 
+cross_entropy_weight = torch.ones(model.pitch_estimator.num_classes, device=device)
+cross_entropy_weight[0] = 0.1
+
 step_count = 0
 for epoch in range(args.epoch):
     tqdm.write(f"Epoch #{epoch}")
@@ -91,7 +94,7 @@ for epoch in range(args.epoch):
 
             # loss
             loss_distill = (z - F.interpolate(hubert_features, z.shape[2])).abs().mean()
-            loss_f0 = F.cross_entropy(f0_out, f0_label)
+            loss_f0 = F.cross_entropy(f0_out, f0_label, weight=cross_entropy_weight)
             loss = loss_f0 + loss_distill * 45
 
             # logging

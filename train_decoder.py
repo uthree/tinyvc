@@ -112,7 +112,6 @@ for epoch in range(args.epoch):
             fake = fake.squeeze(1)
             if d_join:
                 loss_adv = 0
-                fake = fake.clamp(-1.0, 1.0)
                 _, feats_real = discriminator(center(wave))
                 logits, feats_fake = discriminator(center(fake))
                 for logit in logits:
