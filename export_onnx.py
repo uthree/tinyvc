@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 from module.tinyvc import Encoder
 from module.tinyvc import Decoder
-from module.infer import Generator
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-o', '--output-dir', default='onnx')
@@ -44,15 +43,15 @@ sinwave_channels = decoder.source_net.num_harmonics + 1
 content_channels = decoder.source_net.content_channels
 
 z = torch.randn(1, content_channels, 100)
-energy = torch.randn(1, 1, 100)
+energy = torch.randn(1, 1, 100 * decoder.frame_size)
 f0 = torch.randn(1, 1, 100)
 
 torch.onnx.export(
         decoder.source_net,
-        (z, energy, f0),
+        (z, f0, energy),
         output_dir / 'source_net.onnx',
         opset_version=args.opset,
-        input_names=['content', 'energy', 'f0'],
+        input_names=['content', 'f0', 'energy',],
         output_names=['amplitudes', 'kernel'],
         dynamic_axes={
             'content': {0: 'batch_size', 2: 'length'},
@@ -66,10 +65,10 @@ source = torch.randn(1, source_channels, wf_length)
 print("Exporting filter network")
 torch.onnx.export(
         decoder.filter_net,
-        (z, energy, source),
+        (z, f0, energy, source),
         output_dir / 'filter_net.onnx',
         opset_version=args.opset,
-        input_names=['content', 'energy', 'source'],
+        input_names=['content', 'f0', 'energy', 'source'],
         output_names=['waveform'],
         dynamic_axes={
             'content': {0: 'batch_size', 2: 'length'},

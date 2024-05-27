@@ -15,8 +15,8 @@ class LayerNorm(nn.Module):
 
     # x: [BatchSize, cnannels, *]
     def forward(self, x: torch.Tensor):
-        x = F.layer_norm(x.mT, (self.channels,), self.gamma, self.beta, self.eps)
-        return x.mT
+        x = F.layer_norm(x.transpose(1, 2), (self.channels,), self.gamma, self.beta, self.eps)
+        return x.transpose(1, 2)
 
 
 # Global Resnponse Normalization for 1d Sequence (shape=[BatchSize, Channels, Length])
