@@ -26,7 +26,8 @@ parser.add_argument('-step', '--max-steps', default=300000, type=int)
 parser.add_argument('-lr', '--learning-rate', type=float, default=1e-4)
 parser.add_argument('-d', '--device', default='cuda')
 parser.add_argument('-e', '--epoch', default=100000, type=int)
-parser.add_argument('-b', '--batch-size', default=8, type=int)
+parser.add_argument('-b', '--batch-size', default=16, type=int)
+parser.add_argument('--log-interval', default=50, type=int)
 parser.add_argument('--save-interval', default=500, type=int)
 parser.add_argument('-spec-type', choices=['ms-stft', 'mel'], default='ms-stft')
 parser.add_argument('-fp16', default=False, type=bool)
@@ -121,13 +122,13 @@ for epoch in range(args.epoch):
                     loss_feat += (r - f).abs().mean() / len(feats_real)
                 loss_g = loss_adv * args.weight_adv + loss_spec * args.weight_spec + loss_feat * args.weight_feat + loss_dsp * args.weight_dsp
 
-                if step_count % 50 == 0:
+                if step_count % args.log_interval == 0:
                     writer.add_scalar("loss/Feature Matching", loss_feat.item(), step_count)
                     writer.add_scalar("loss/Generator Adversarial", loss_adv.item(), step_count)
             else:
                 loss_g = loss_spec * args.weight_spec + loss_dsp * args.weight_dsp
             
-            if step_count % 50 == 0:
+            if step_count % args.log_interval == 0:
                 writer.add_scalar("loss/Spectrogram", loss_spec.item(), step_count)
                 writer.add_scalar("loss/DSP", loss_dsp.item(), step_count)
 
@@ -150,7 +151,7 @@ for epoch in range(args.epoch):
             scaler.scale(loss_d).backward()
             nn.utils.clip_grad_norm_(discriminator.parameters(), 1.0)
             scaler.step(OptD)
-            if step_count % 50 == 0:
+            if step_count % args.log_interval == 0:
                 writer.add_scalar("loss/Discriminator Adversarial", loss_d.item(), step_count)
         
         if d_join:

@@ -27,7 +27,8 @@ parser.add_argument('-path', '--path', default='models/encoder.pt')
 parser.add_argument('-lr', '--learning-rate', type=float, default=1e-4)
 parser.add_argument('-d', '--device', default='cuda')
 parser.add_argument('-e', '--epoch', default=60, type=int)
-parser.add_argument('-b', '--batch-size', default=4, type=int)
+parser.add_argument('-b', '--batch-size', default=16, type=int)
+parser.add_argument('--log-interval', default=50, type=int)
 parser.add_argument('-fp16', default=False, type=bool)
 args = parser.parse_args()
 
@@ -94,7 +95,7 @@ for epoch in range(args.epoch):
             loss = loss_f0 + loss_distill * 45
 
             # logging
-            if step_count % 50 == 0:
+            if step_count % args.log_interval == 0:
                 writer.add_scalar("loss/Pitch Estimation", loss_f0.item(), step_count)
                 writer.add_scalar("loss/Distillation", loss_distill.item(), step_count)
 
