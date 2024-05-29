@@ -100,7 +100,7 @@ for epoch in range(args.epoch):
         with torch.cuda.amp.autocast(enabled=args.fp16):
             z, f0 = encoder.infer(spec)
             z_fake = match_features(z, z).detach()
-            energy = estimate_energy(wave, decoder.frame_size)
+            energy = estimate_energy(wave)
 
             amps, kernel = decoder.source_net(z_fake, f0, energy)
             dsp_out = decoder.dsp(f0, amps, kernel)
