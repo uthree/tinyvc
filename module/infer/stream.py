@@ -45,9 +45,9 @@ class StreamInfer:
 
         self.block_size = block_size
         self.extra_size = extra_size
-        self.sola_search_size = 480
+        self.sola_search_size = 1920
         self.last_dilay_size = 3840
-        self.crossfade_size = 960
+        self.crossfade_size = 1920
         self.use_phase_vocoder = use_phase_vocoder
         self.f0_estimation = f0_estimation
 
