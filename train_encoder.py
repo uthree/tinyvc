@@ -63,7 +63,7 @@ else:
     add_noise = False
 
 cross_entropy_weight = torch.ones(model.pitch_estimator.num_classes, device=device)
-cross_entropy_weight[0] = 0.1
+cross_entropy_weight[0] = 5e-3
 
 step_count = 0
 for epoch in range(args.epoch):
