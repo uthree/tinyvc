@@ -4,263 +4,151 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .convnext import ConvNeXtLayer
+from torch.nn.utils.parametrizations import weight_norm
+
+def get_padding(kernel_size, dilation=1):
+    return int((kernel_size*dilation - dilation)/2)
+
+def init_weights(m, mean=0.0, std=0.01):
+    classname = m.__class__.__name__
+    if classname.find("Conv") != -1:
+        m.weight.data.normal_(mean, std)
 
 
-# Oscillate harmonic signal
-# 基音と倍音を生成
-#
-# Inputs ---
-# f0: [BatchSize, 1, Frames]
-#
-# frame_size: int
-# sample_rate: float or int
-# min_frequency: float
-# num_harmonics: int
-#
-# Output: [BatchSize, NumHarmonics+1, Length]
-#
-# length = Frames * frame_size
-def oscillate_harmonics(
-        f0,
-        frame_size=480,
-        sample_rate=24000,
-        num_harmonics=0,
-        min_frequency=20.0,
-    ):
-    N = f0.shape[0]
-    C = num_harmonics + 1
-    Lf = f0.shape[2]
-    Lw = Lf * frame_size
-
-    device = f0.device
-
-    # generate frequency of harmonics
-    mul = (torch.arange(C, device=device) + 1).unsqueeze(0).unsqueeze(2)
-
-    # change length to wave's
-    fs = F.interpolate(f0, Lw, mode='linear') * mul
-
-    # unvoiced / voiced mask
-    uv = (f0 > min_frequency).to(torch.float)
-    uv = F.interpolate(uv, Lw, mode='linear')
-
-    # generate harmonics
-    I = torch.cumsum(fs / sample_rate, dim=2) # numerical integration
-    theta = 2 * math.pi * (I % 1) # convert to radians
-
-    harmonics = torch.sin(theta) * uv
-
-    return harmonics.to(device)
-
-
-# Oscillate noise via gaussian noise and equalizer
-#
-# fft_bin = n_fft // 2 + 1
-# kernel: [BatchSize, fft_bin, Length]
-#
-# Output: [BatchSize, 1, Length * frame_size]
-def oscillate_noise(
-        kernel,
-        frame_size=480,
-        n_fft=1920
-    ):
-    N = kernel.shape[0]
-    Lf = kernel.shape[2] # frame length
-    fft_bin = n_fft // 2 + 1
-    dtype = kernel.dtype
-
-    kernel = kernel.to(torch.float) # to fp32
-
-    # calculate convolution in fourier-domain
-    # Since the input is an aperiodic signal such as Gaussian noise,
-    # there is no need to consider the phase on the kernel side.
-    angle = torch.rand(N, fft_bin, Lf, device=kernel.device) * 2 * math.pi - math.pi
-    noise_stft = torch.exp(1j * angle)
-    y_stft = noise_stft * kernel # In fourier domain, Multiplication means convolution.
-    y_stft = F.pad(y_stft, [1, 0]) # pad
-    y = torch.istft(y_stft, n_fft, frame_size)
-    y = y.unsqueeze(1)
-    y = y.to(dtype)
-    return y
-
-
-class FiLM(nn.Module):
-    def __init__(self, input_channels, condition_channels):
-        super().__init__()
-        self.to_shift = nn.Conv1d(condition_channels, input_channels, 1)
-        self.to_scale = nn.Conv1d(condition_channels, input_channels, 1)
-
-    def forward(self, x, c):
-        shift = self.to_shift(c)
-        scale = self.to_scale(c)
-        return x * scale + shift
-
-
-# Source Network.
-# This network estimate each harmonic's amplitude and linear filter to noise transformation.
-class SourceNet(nn.Module):
-    def __init__(self,
-                 content_channels=768,
-                 channels=128,
-                 kernel_size=7,
-                 num_layers=3,
-                 n_fft=1920,
-                 frame_size=480,
-                 num_harmonics=14,
-                 sample_rate=24000):
-        super().__init__()
-        self.n_fft = n_fft
-        self.frame_size = frame_size
-        self.num_harmonics = num_harmonics
-        self.sample_rate = sample_rate
-        self.content_channels = content_channels
-        fft_bin = n_fft // 2 + 1
-        self.content_in = nn.Conv1d(content_channels, channels, 1)
-        self.energy_in = nn.Conv1d(1, channels, 1)
-        self.f0_in = nn.Conv1d(1, channels, 1)
-        self.mid_layers = nn.Sequential(*[ConvNeXtLayer(channels, kernel_size) for _ in range(num_layers)])
-        self.to_amps = nn.Conv1d(channels, num_harmonics + 1, 1)
-        self.to_kernel = nn.Conv1d(channels, fft_bin, 1)
-
-    def forward(self, content, f0, energy):
-        energy = F.max_pool1d(energy, self.frame_size, self.frame_size)
-        x = self.content_in(content) + self.energy_in(energy) + self.f0_in(torch.log(F.relu(f0) + 1e-6))
-        x = self.mid_layers(x)
-        # 実はこの活性化めっちゃ優秀説ある
-        # 正の方向にはLinear, 負の方向にはexp(x)として働くので勾配消えないし値デカくなりすぎない。最高。
-        amps = F.elu(self.to_amps(x)) + 1.0
-        kernel = F.elu(self.to_kernel(x)) + 1.0
-        return amps, kernel
-
-
-class Downsample(nn.Module):
-    def __init__(self, input_channels, output_channels, factor=4):
-        super().__init__()
-        self.factor = factor
-
-        self.down_res = nn.Conv1d(input_channels, output_channels, 1)
-        self.c1 = nn.Conv1d(input_channels, input_channels, 3, 1, 1, dilation=1, padding_mode='replicate')
-        self.c2 = nn.Conv1d(input_channels, input_channels, 3, 1, 2, dilation=2, padding_mode='replicate')
-        self.c3 = nn.Conv1d(input_channels, output_channels, 3, 1, 4, dilation=4, padding_mode='replicate')
-
-    def forward(self, x):
-        x = F.interpolate(x, scale_factor=1.0/self.factor, mode='linear')
-        res = self.down_res(x)
-        x = F.leaky_relu(x, 0.1)
-        x = self.c1(x)
-        x = F.leaky_relu(x, 0.1)
-        x = self.c2(x)
-        x = F.leaky_relu(x, 0.1)
-        x = self.c3(x)
-        x = x + res
-        return x
-
-
-class Upsample(nn.Module):
-    def __init__(self, input_channels, output_channels, cond_channels, factor=4):
-        super().__init__()
-        self.factor = factor
-
-        self.c1 = nn.Conv1d(input_channels, input_channels, 3, 1, 1, dilation=1, padding_mode='replicate')
-        self.c2 = nn.Conv1d(input_channels, input_channels, 3, 1, 3, dilation=3, padding_mode='replicate')
-        self.film1 = FiLM(input_channels, cond_channels)
-        self.c3 = nn.Conv1d(input_channels, input_channels, 3, 1, 9, dilation=9, padding_mode='replicate')
-        self.c4 = nn.Conv1d(input_channels, input_channels, 3, 1, 27, dilation=27, padding_mode='replicate')
-        self.film2 = FiLM(input_channels, cond_channels)
-        self.c5 = nn.Conv1d(input_channels, output_channels, 1)
-
-    def forward(self, x, c):
-        x = F.interpolate(x, scale_factor=self.factor, mode='linear')
-        res = x
-        x = F.leaky_relu(x, 0.1)
-        x = self.c1(x)
-        x = F.leaky_relu(x, 0.1)
-        x = self.c2(x)
-        x = self.film1(x, c)
-        x = x + res
-        res = x
-        x = F.leaky_relu(x, 0.1)
-        x = self.c3(x)
-        x = F.leaky_relu(x, 0.1)
-        x = self.c4(x)
-        x = self.film2(x, c)
-        x = x + res
-        x = self.c5(x)
-        return x
-
-
-class FilterNet(nn.Module):
-    def __init__(self,
-                 channels=[384, 192, 96, 48, 24],
-                 factors=[2, 3, 4, 4, 5],
-                 content_channels=768,
-                 num_harmonics=14):
-        super().__init__()
-        # input layer 
-        self.content_in = nn.Conv1d(content_channels, channels[0], 1)
-        self.f0_in = nn.Conv1d(1, channels[0], 1)
-
-        # donwsamples
-        self.downs = nn.ModuleList([])
-        self.downs.append(nn.Conv1d(num_harmonics + 3, channels[-1], 3, 1, 1, padding_mode='replicate'))
-        cs = list(reversed(channels[1:]))
-        ns = cs[1:] + [channels[0]]
-        fs = list(reversed(factors[1:]))
-        for c, n, f in zip(cs, ns, fs):
-            self.downs.append(Downsample(c, n, f))
-
-        # upsamples
-        self.ups = nn.ModuleList([])
-        cs = channels
-        ns = channels[1:] + [channels[-1]]
-        fs = factors
-        for c, n, f in zip(cs, ns, fs):
-            self.ups.append(Upsample(c, n, c, f))
-        self.output_layer = nn.Conv1d(channels[-1], 1, 7, 1, 3, padding_mode='replicate')
-
-    def forward(self, content, f0, energy, source):
-        x = self.content_in(content) + self.f0_in(torch.log(F.relu(f0) + 1e-6))
-        src = torch.cat([source, energy], dim=1)
-
-        skips = []
-        for down in self.downs:
-            src = down(src)
-            skips.append(src)
-
-        for up, s in zip(self.ups, reversed(skips)):
-            x = up(x, s)
-        return self.output_layer(x)
-
-
-class Decoder(nn.Module):
+class SineOscillator(nn.Module):
     def __init__(
             self,
             sample_rate=24000,
-            n_fft = 1920,
             frame_size=480,
-            num_harmonics=14,
+            min_frequency=20.0,
+            noise_scale=0.05
         ):
         super().__init__()
         self.sample_rate = sample_rate
         self.frame_size = frame_size
-        self.num_harmonics = num_harmonics
-        self.n_fft = n_fft
+        self.min_frequency = min_frequency
+        self.noise_scale = noise_scale
 
-        self.source_net = SourceNet(frame_size=frame_size, sample_rate=sample_rate, n_fft=n_fft)
-        self.filter_net = FilterNet()
+    def forward(self, f0):
+        f0 = F.interpolate(f0, scale_factor=self.frame_size, mode='linear')
+        uv = (f0 >= self.min_frequency).to(torch.float)
+        integrated = torch.cumsum(f0 / self.sample_rate, dim=2)
+        theta = 2 * math.pi * (integrated % 1)
+        sinusoid = torch.sin(theta) * uv
+        sinusoid = sinusoid + torch.randn_like(sinusoid) * self.noise_scale
+        return sinusoid
 
-    def infer(self, content, f0, energy):
-        amps, kernel = self.source_net(content, f0, energy)
-        src = self.dsp(f0, amps, kernel)
-        out = self.filter_net(content, f0, energy, src)
-        return out.squeeze(1)
+
+class ResBlock1(nn.Module):
+    def __init__(self, channels, kernel_size=3, dilations=[1, 3, 5]):
+        super().__init__()
+        self.convs1 = nn.ModuleList([])
+        self.convs2 = nn.ModuleList([])
+        for d in dilations:
+            self.convs1.append(weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, get_padding(kernel_size, d), d)))
+            self.convs2.append(weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, get_padding(kernel_size, 1), 1)))
+
+    def forward(self, x):
+        for c1, c2 in zip(self.convs1, self.convs2):
+            xt = F.leaky_relu(x, 0.1)
+            xt = c1(xt)
+            xt = F.leaky_relu(xt, 0.1)
+            xt = c2(xt)
+            x = xt + x
+        return x
     
-    @torch.cuda.amp.autocast(enabled=False)
-    def dsp(self, f0, amps, kernel):
-        harmonics = oscillate_harmonics(f0, self.frame_size, self.sample_rate, self.num_harmonics)
-        amps = F.interpolate(amps, scale_factor=self.frame_size, mode='linear')
-        harmonics = harmonics * amps
-        noise = oscillate_noise(kernel, self.frame_size, self.n_fft)
-        source = torch.cat([harmonics, noise], dim=1)
-        return source
+
+class ResBlock2(nn.Module):
+    def __init__(self, channels, kernel_size=3, dilations=[1, 3]):
+        super().__init__()
+        self.convs = nn.ModuleList([])
+        for d in dilations:
+            self.convs.append(weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, get_padding(kernel_size, d), d)))
+
+    def forward(self, x):
+        for c in self.convs:
+            xt = F.leaky_relu(x, 0.1)
+            xt = c(xt)
+            x = xt + x
+        return x
+    
+
+class Decoder(nn.Module):
+    def __init__(
+            self,
+            content_channels=768,
+            sample_rate=24000,
+            frame_size=480,
+            upsample_initial_channels=256,
+            resblock_type="2",
+            resblock_kernel_sizes=[3, 5, 7],
+            resblock_dilations=[[1, 2], [2, 6], [3, 12]],
+            upsample_kernel_sizes=[24, 20, 8],
+            upsample_rates=[12, 10, 4]
+        ):
+        super().__init__()
+        self.content_channels = content_channels
+        self.frame_size = frame_size
+        self.num_kernels = len(resblock_kernel_sizes)
+        self.num_upsamples = len(upsample_rates)
+
+        if resblock_type == "1":
+            resblock = ResBlock1
+        elif resblock_type == "2":
+            resblock = ResBlock2
+        else:
+            raise "invalid resblock type"
+
+        self.oscillator = SineOscillator(sample_rate, frame_size)
+        self.conv_pre = weight_norm(nn.Conv1d(content_channels, upsample_initial_channels, 7, 1, 3))
+        self.source_pre = weight_norm(nn.Conv1d(2, upsample_initial_channels//(2**(self.num_upsamples)), 7, 1, 3))
+        self.ups = nn.ModuleList([])
+        downs = []
+        for i, (u, k) in enumerate(zip(upsample_rates, upsample_kernel_sizes)):
+            c1 = upsample_initial_channels//(2**i)
+            c2 = upsample_initial_channels//(2**(i+1))
+            p = (k-u)//2
+            self.ups.append(weight_norm(nn.ConvTranspose1d(c1, c2, k, u, p)))
+            downs.append(weight_norm(nn.Conv1d(c2, c1, k, u, p)))
+        self.downs = nn.ModuleList(reversed(downs))
+        
+        self.resblocks = nn.ModuleList()
+        for i in range(len(self.ups)):
+            ch = upsample_initial_channels//(2**(i+1))
+            for j, (k, d) in enumerate(zip(resblock_kernel_sizes, resblock_dilations)):
+                self.resblocks.append(resblock(ch, k, d))
+
+        self.conv_post = weight_norm(nn.Conv1d(ch, 1, 7, 1, padding=3))
+
+        self.ups.apply(init_weights)
+        self.conv_post.apply(init_weights)
+
+    def forward(self, x, f0, energy):
+        sinusoid = self.oscillator(f0)
+        s = torch.cat([sinusoid, energy], dim=1)
+        s = self.source_pre(s)
+        skips = [s]
+        for i in range(self.num_upsamples):
+            s = self.downs[i](s)
+            skips.append(s)
+        skips = list(reversed(skips))
+        x = self.conv_pre(x)
+        for i in range(self.num_upsamples):
+            x = x + skips[i]
+            x = F.leaky_relu(x, 0.1)
+            x = self.ups[i](x)
+            xs = None
+            for j in range(self.num_kernels):
+                if xs is None:
+                    xs = self.resblocks[i*self.num_kernels+j](x)
+                else:
+                    xs += self.resblocks[i*self.num_kernels+j](x)
+            x = xs / self.num_kernels
+        x = x + skips[-1]
+        x = F.leaky_relu(x)
+        x = self.conv_post(x)
+        x = torch.tanh(x)
+        return x
+    
+    def infer(self, x, f0, energy):
+        return self.forward(x, f0, energy).squeeze(1)

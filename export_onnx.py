@@ -37,43 +37,21 @@ torch.onnx.export(
         dynamic_axes={
             'spectrogram': {0: 'batch_size', 2: 'length'}})
 
-print("Exporting source network")
-fft_bin = decoder.source_net.n_fft // 2 + 1
-sinwave_channels = decoder.source_net.num_harmonics + 1
-content_channels = decoder.source_net.content_channels
 
+print("Exporting decoder")
+content_channels = decoder.content_channels
 z = torch.randn(1, content_channels, 100)
 energy = torch.randn(1, 1, 100 * decoder.frame_size)
 f0 = torch.randn(1, 1, 100)
 
 torch.onnx.export(
-        decoder.source_net,
+        decoder,
         (z, f0, energy),
-        output_dir / 'source_net.onnx',
+        output_dir / 'decoder.onnx',
         opset_version=args.opset,
-        input_names=['content', 'f0', 'energy',],
-        output_names=['amplitudes', 'kernel'],
-        dynamic_axes={
-            'content': {0: 'batch_size', 2: 'length'},
-            'energy': {0: 'batch_size', 2: 'length'},
-            'f0': {0: 'batch_size', 2: 'length'},
-            })
-
-source_channels = decoder.source_net.num_harmonics + 2
-wf_length = decoder.source_net.frame_size * 100
-source = torch.randn(1, source_channels, wf_length)
-print("Exporting filter network")
-torch.onnx.export(
-        decoder.filter_net,
-        (z, f0, energy, source),
-        output_dir / 'filter_net.onnx',
-        opset_version=args.opset,
-        input_names=['content', 'f0', 'energy', 'source'],
+        input_names=['content', 'f0', 'energy'],
         output_names=['waveform'],
         dynamic_axes={
             'content': {0: 'batch_size', 2: 'length'},
-            'energy': {0: 'batch_size', 2: 'length'},
-            'source': {0: 'batch_size', 2: 'length'},
-            })
-
-
+            'f0': {0: 'batch_size', 2: 'length'},
+            'energy': {0: 'batch_size', 2: 'length'},})

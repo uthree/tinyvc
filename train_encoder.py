@@ -75,7 +75,7 @@ for epoch in range(args.epoch):
         f0 = f0.to(device)
 
         Opt.zero_grad()
-        with torch.cuda.amp.autocast(enabled=args.fp16):
+        with torch.cuda.amp.autocast(enabled=args.fp16, dtype=torch.bfloat16):
             wave_16k = resample(wave, 24000, 16000)
             # get pseudo-label
             hubert_features = hubert(wave_16k, output_hidden_states=True).hidden_states[4]

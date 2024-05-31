@@ -17,9 +17,6 @@ class MultiScaleSTFTLoss(nn.Module):
         self.scales = scales
 
     def forward(self, x, y):
-        x = x.to(torch.float)
-        y = y.to(torch.float)
-
         loss = 0
         num_scales = len(self.scales)
         for s in self.scales:

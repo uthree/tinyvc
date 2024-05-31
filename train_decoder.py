@@ -97,16 +97,13 @@ for epoch in range(args.epoch):
 
         # train Generator
         OptG.zero_grad()
-        with torch.cuda.amp.autocast(enabled=args.fp16):
+        with torch.cuda.amp.autocast(enabled=args.fp16, dtype=torch.bfloat16):
             z, f0 = encoder.infer(spec)
             z_fake = match_features(z, z).detach()
             energy = estimate_energy(wave)
 
-            amps, kernel = decoder.source_net(z_fake, f0, energy)
-            dsp_out = decoder.dsp(f0, amps, kernel)
-            fake = decoder.filter_net(z_fake, f0, energy, dsp_out)
+            fake = decoder(z_fake, f0, energy)
 
-            loss_dsp = SpecLoss(dsp_out.sum(1), wave)
             loss_spec = SpecLoss(fake.squeeze(1), wave)
 
             fake = fake.squeeze(1)
@@ -119,17 +116,16 @@ for epoch in range(args.epoch):
                 loss_feat = 0
                 for r, f in zip(feats_real, feats_fake):
                     loss_feat += (r - f).abs().mean() / len(feats_real)
-                loss_g = loss_adv * args.weight_adv + loss_spec * args.weight_spec + loss_feat * args.weight_feat + loss_dsp * args.weight_dsp
+                loss_g = loss_adv * args.weight_adv + loss_spec * args.weight_spec + loss_feat * args.weight_feat
 
                 if step_count % args.log_interval == 0:
                     writer.add_scalar("loss/Feature Matching", loss_feat.item(), step_count)
                     writer.add_scalar("loss/Generator Adversarial", loss_adv.item(), step_count)
             else:
-                loss_g = loss_spec * args.weight_spec + loss_dsp * args.weight_dsp
+                loss_g = loss_spec * args.weight_spec
             
             if step_count % args.log_interval == 0:
                 writer.add_scalar("loss/Spectrogram", loss_spec.item(), step_count)
-                writer.add_scalar("loss/DSP", loss_dsp.item(), step_count)
 
         scaler.scale(loss_g).backward()
         nn.utils.clip_grad_norm_(decoder.parameters(), 1.0)
@@ -138,7 +134,7 @@ for epoch in range(args.epoch):
         if d_join:
             fake = fake.detach()
             OptD.zero_grad()
-            with torch.cuda.amp.autocast(enabled=args.fp16):
+            with torch.cuda.amp.autocast(enabled=args.fp16, dtype=torch.bfloat16):
                 loss_d = 0
                 logits, _ = discriminator(center(wave))
                 for logit in logits:
@@ -154,9 +150,9 @@ for epoch in range(args.epoch):
                 writer.add_scalar("loss/Discriminator Adversarial", loss_d.item(), step_count)
         
         if d_join:
-            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Dis.: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Spec.: {loss_spec.item():.4f}, Feat. {loss_feat.item():.4f}, DSP: {loss_dsp.item():.4f}")
+            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Dis.: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Spec.: {loss_spec.item():.4f}, Feat. {loss_feat.item():.4f}")
         else:
-            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Spec.: {loss_spec.item():.4f}, DSP: {loss_dsp.item():.4f}")
+            tqdm.write(f"Epoch: {epoch}, Step: {step_count}, Spec.: {loss_spec.item():.4f}")
 
         scaler.update()
         step_count += 1
