@@ -20,7 +20,7 @@ class DiscriminatorP(nn.Module):
         convs = [nn.Conv2d(1, c, (k, 1), (s, 1), (get_padding(5, 1), 0), padding_mode='replicate')]
         for i in range(num_layers):
             c_next = min(c * channels_mul, max_channels)
-            convs.append(nn.Conv2d(c, c_next, (k, 1), (s, 2), (get_padding(5, 1), 0), padding_mode='replicate'))
+            convs.append(nn.Conv2d(c, c_next, (k, 1), (s, 1), (get_padding(5, 1), 0), padding_mode='replicate'))
             c = c_next
         self.convs = nn.ModuleList([norm_f(c) for c in convs])
         self.post = norm_f(nn.Conv2d(c, 1, (3, 1), 1, (1, 0), padding_mode='replicate'))
